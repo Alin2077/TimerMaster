@@ -29,13 +29,14 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
-      - name: Build Tauri app (signed)
+      # Tauri build 会自动签名（因为 updater.active:true + 环境变量已设置）
+      - name: Build Tauri app
         run: npm run tauri build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
-      # 代码签名——可选，仅在配置了证书时才执行
+      # 代码签名（可选）—— 消除 Windows Defender 警告
       - name: Sign binaries (optional)
         shell: pwsh
         env:
@@ -49,7 +50,6 @@ jobs:
           $certBytes = [Convert]::FromBase64String($env:CERT_BASE64)
           $certPath = Join-Path $env:RUNNER_TEMP "cert.pfx"
           [IO.File]::WriteAllBytes($certPath, $certBytes)
-
           $files = Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -Include "*.exe"
           $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" |
                       Select-Object -First 1 -ExpandProperty FullName
@@ -59,31 +59,7 @@ jobs:
               /tr http://timestamp.digicert.com /td SHA256 "$($file.FullName)"
           }
 
-      # 使用私钥签名安装包（用于自动更新校验）
-      - name: Sign installer for updater
-        shell: pwsh
-        env:
-          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          # 写入私钥到临时文件
-          $keyPath = Join-Path $env:RUNNER_TEMP "privatekey.pem"
-          $env:KEY | Out-File -FilePath $keyPath -Encoding ASCII -NoNewline
-
-          $installer = Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
-          if (-not $installer) {
-            Write-Host "::error::Installer not found!"
-            exit 1
-          }
-
-          Write-Host "Signing: $($installer.Name)"
-          npx tauri signer sign -k $keyPath -p $env:KEY_PASSWORD "$($installer.FullName)"
-          Write-Host "✅ Signature generated"
-
-          # 列出签名文件
-          Get-ChildItem "src-tauri/target/release/bundle/nsis/*.sig"
-
-      # 生成 updater.json（自动更新元数据）
+      # 查找签名文件并生成 updater.json
       - name: Generate updater.json
         shell: pwsh
         env:
@@ -91,30 +67,26 @@ jobs:
         run: |
           $version = $env:TAG_NAME -replace '^v', ''
           $installerName = "TimerMaster_${version}_x64-setup.exe"
-          $sigFile = "src-tauri/target/release/bundle/nsis/${installerName}.sig"
+          $nsisDir = "src-tauri/target/release/bundle/nsis"
 
-          # 读取签名文件
+          # 查找 .sig 文件（Tauri 构建自动生成）
+          $sigFiles = Get-ChildItem "$nsisDir/*.sig"
           $signature = ""
-          if (Test-Path $sigFile) {
-            $signature = Get-Content $sigFile -Raw | ForEach-Object { $_.Trim() }
+          if ($sigFiles) {
+            $sigFile = $sigFiles | Select-Object -First 1
+            $signature = Get-Content $sigFile.FullName -Raw | ForEach-Object { $_.Trim() }
+            Write-Host "Found signature: $($sigFile.Name)"
           } else {
-            # 尝试搜索其他 .sig 文件
-            $altSig = Get-ChildItem "src-tauri/target/release/bundle/nsis/*.sig" | Select-Object -First 1
-            if ($altSig) {
-              $signature = Get-Content $altSig.FullName -Raw | ForEach-Object { $_.Trim() }
-              Write-Host "Using sig file: $($altSig.Name)"
-            }
+            Write-Host "::warning::No .sig file found - update signature will be empty"
           }
 
-          Write-Host "Signature: $signature"
+          Write-Host "Signature: [$($signature.Substring(0, [Math]::Min(40, $signature.Length)))]"
 
-          # 构建下载 URL
           $downloadUrl = "https://github.com/Alin2077/TimerMaster/releases/download/$env:TAG_NAME/$installerName"
 
-          # 生成 updater.json
           $updater = @{
             version = $version
-            notes = "自动更新: TimerMaster $version"
+            notes = "TimerMaster $version"
             pub_date = (Get-Date -Format "o")
             platforms = @{
               "windows-x86_64" = @{
@@ -124,10 +96,10 @@ jobs:
             }
           }
 
-          $updaterPath = "src-tauri/target/release/bundle/nsis/updater.json"
+          $updaterPath = "$nsisDir/updater.json"
           $updater | ConvertTo-Json -Depth 10 | Out-File -FilePath $updaterPath -Encoding UTF8
-          Write-Host "✅ updater.json generated at: $updaterPath"
-          Get-Content $updaterPath
+          Write-Host "✅ updater.json generated"
+          Get-Content $updaterPath | Select-Object -First 5
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
