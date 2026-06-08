@@ -1,12 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-
-interface TickEvent {
-  id: string;
-  remaining: number;
-  total: number;
-}
 
 interface SingleTimerProps {
   onTaskCreated: () => void;
@@ -23,30 +16,6 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
   const [minutes, setMinutes] = useState("");
   const [seconds, setSeconds] = useState("");
   const [loading, setLoading] = useState(false);
-  const [activeTimer, setActiveTimer] = useState<{
-    id: string;
-    remaining: number;
-    total: number;
-  } | null>(null);
-
-  useEffect(() => {
-    const unlisten = listen<TickEvent>("timer-tick", (event) => {
-      const { id, remaining, total } = event.payload;
-      setActiveTimer((prev) => {
-        if (!prev) return { id, remaining, total };
-        // Only update if this is the first/current active timer
-        // or if the id matches
-        if (prev.id === id) {
-          return { id, remaining, total };
-        }
-        return prev;
-      });
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, []);
 
   const handleStart = useCallback(async () => {
     const mins = parseInt(minutes) || 0;
@@ -135,10 +104,6 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
         />
         <span>秒</span>
       </div>
-
-      {activeTimer && activeTimer.remaining > 0 && (
-        <div className="timer-display">{formatTime(activeTimer.remaining)}</div>
-      )}
 
       <button
         className="btn btn-primary"

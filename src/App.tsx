@@ -1,14 +1,14 @@
 import { useState, useCallback, useEffect } from "react";
 import SingleTimer from "./components/SingleTimer";
 import RepeatingReminder from "./components/RepeatingReminder";
+import RunningTimers from "./components/RunningTimers";
 import TaskList from "./components/TaskList";
 import { check } from "@tauri-apps/plugin-updater";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 
-type Tab = "single" | "repeating" | "list";
+type Tab = "single" | "repeating" | "running" | "list";
 
-// GitHub 在国内访问较慢，超时设长一些
 const TIMEOUT_SECS = 30;
 
 export default function App() {
@@ -19,7 +19,7 @@ export default function App() {
   const [updateMsg, setUpdateMsg] = useState("");
 
   useEffect(() => {
-    getVersion().then(setVersion).catch(() => setVersion("1.0.2"));
+    getVersion().then(setVersion).catch(() => setVersion("1.0.4"));
   }, []);
 
   const handleTaskCreated = useCallback(() => {
@@ -30,7 +30,6 @@ export default function App() {
     setUpdating(true);
     setUpdateMsg("检查中...");
 
-    // 超时保护——避免请求卡死
     const timeout = setTimeout(() => {
       setUpdating(false);
       setUpdateMsg("检查超时，请检查网络后重试");
@@ -128,6 +127,12 @@ export default function App() {
           🔄 重复
         </button>
         <button
+          className={`tab-btn ${activeTab === "running" ? "active" : ""}`}
+          onClick={() => setActiveTab("running")}
+        >
+          🎯 计时中
+        </button>
+        <button
           className={`tab-btn ${activeTab === "list" ? "active" : ""}`}
           onClick={() => setActiveTab("list")}
         >
@@ -141,6 +146,7 @@ export default function App() {
       {activeTab === "repeating" && (
         <RepeatingReminder onTaskCreated={handleTaskCreated} />
       )}
+      {activeTab === "running" && <RunningTimers key={refreshKey} />}
       {activeTab === "list" && <TaskList key={refreshKey} />}
 
       <div style={{ textAlign: "center", marginTop: 16, fontSize: 11, color: "#444" }}>

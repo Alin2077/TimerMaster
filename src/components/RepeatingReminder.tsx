@@ -1,21 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-
-interface TickEvent {
-  id: string;
-  remaining: number;
-  total: number;
-}
 
 interface RepeatingReminderProps {
   onTaskCreated: () => void;
-}
-
-function formatTime(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
 const PRESETS = [
@@ -30,30 +17,10 @@ const PRESETS = [
 export default function RepeatingReminder({
   onTaskCreated,
 }: RepeatingReminderProps) {
-  const [activeTask, setActiveTask] = useState<{
-    id: string;
-    remaining: number;
-    total: number;
-  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [minutes, setMinutes] = useState("45");
   const [customTitle, setCustomTitle] = useState("");
-
-  useEffect(() => {
-    const unlisten = listen<TickEvent>("timer-tick", (event) => {
-      const { id, remaining, total } = event.payload;
-      setActiveTask((prev) => {
-        if (prev && prev.id === id) {
-          return { id, remaining, total };
-        }
-        return prev;
-      });
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, []);
+  const [started, setStarted] = useState(false);
 
   const handleStart = useCallback(async () => {
     const mins = parseInt(minutes) || 45;
@@ -62,15 +29,12 @@ export default function RepeatingReminder({
 
     setLoading(true);
     try {
-      const result = (await invoke("create_repeating_timer", {
+      await invoke("create_repeating_timer", {
         title,
         intervalSecs,
-      })) as { id: string };
-      setActiveTask({
-        id: result.id,
-        remaining: intervalSecs,
-        total: intervalSecs,
       });
+      setStarted(true);
+      setCustomTitle("");
       onTaskCreated();
     } catch (e) {
       console.error("Failed to create repeating timer:", e);
@@ -79,34 +43,29 @@ export default function RepeatingReminder({
     }
   }, [minutes, customTitle, onTaskCreated]);
 
-  const handleStop = useCallback(async () => {
-    if (!activeTask) return;
-    try {
-      await invoke("cancel_timer", { taskId: activeTask.id });
-      setActiveTask(null);
-      onTaskCreated();
-    } catch (e) {
-      console.error("Failed to cancel timer:", e);
-    }
-  }, [activeTask, onTaskCreated]);
-
   return (
     <div className="card">
       <div className="card-title">🔄 重复提醒</div>
 
-      {activeTask ? (
-        <div className="quick-reminder">
-          <div className="big-icon">🧘</div>
-          <div className="timer-display">{formatTime(activeTask.remaining)}</div>
-          <div className="interval-info">
-            <span className="active-badge">● 运行中</span>
-            &nbsp; 距离下次提醒还有 {formatTime(activeTask.remaining)}
+      {started ? (
+        <div style={{ textAlign: "center", padding: "20px 0" }}>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: "#27ae60", marginBottom: 8 }}>
+            循环提醒已启动！
           </div>
-          <div style={{ marginTop: 16 }}>
-            <button className="btn btn-danger" onClick={handleStop}>
-              ⏹ 停止提醒
-            </button>
+          <div style={{ fontSize: 13, color: "#888" }}>
+            每 <strong>{minutes}</strong> 分钟提醒一次
           </div>
+          <div style={{ fontSize: 12, color: "#666", marginTop: 6 }}>
+            切换到「🎯 计时中」查看倒计时
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => setStarted(false)}
+            style={{ marginTop: 16, width: "auto", padding: "8px 24px", background: "#555" }}
+          >
+            ➕ 再创建一个
+          </button>
         </div>
       ) : (
         <>
@@ -159,7 +118,7 @@ export default function RepeatingReminder({
             disabled={loading}
             style={{ width: "100%" }}
           >
-            {loading ? "⏳ 启动中..." : `▶ 每 ${minutes} 分钟循环提醒`}
+            {loading ? "⏳ 启动中..." : `▶ 启动循环提醒`}
           </button>
         </>
       )}
