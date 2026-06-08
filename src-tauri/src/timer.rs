@@ -14,6 +14,16 @@ pub struct TimerTask {
     pub remaining_secs: u64,
     pub status: TaskStatus,
     pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repeat_rule: Option<RepeatRule>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub persistent: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,6 +46,42 @@ pub enum TaskStatus {
     Cancelled,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RepeatRule {
+    /// 每 N 分钟（原固定间隔）
+    #[serde(rename = "interval")]
+    Interval { interval_minutes: u64 },
+    /// 每天固定时间
+    #[serde(rename = "daily")]
+    Daily,
+    /// 工作日（周一至周五）
+    #[serde(rename = "weekdays")]
+    Weekdays,
+    /// 每周 N
+    #[serde(rename = "weekly")]
+    Weekly { day_of_week: u32 },
+    /// 每月 N 号
+    #[serde(rename = "monthly")]
+    Monthly { day_of_month: u32 },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskStats {
+    pub total: usize,
+    pub completed: usize,
+    pub cancelled: usize,
+    pub running: usize,
+    pub completion_rate: f64,
+    pub by_category: Vec<CategoryStat>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CategoryStat {
+    pub category: String,
+    pub total: usize,
+    pub completed: usize,
+}
+
 pub struct TimerManager {
     pub tasks: Arc<Mutex<Vec<TimerTask>>>,
     cancel_flags: Arc<Mutex<Vec<(String, Arc<AtomicBool>)>>>,
@@ -49,7 +95,16 @@ impl TimerManager {
         }
     }
 
-    pub async fn add_task(&self, title: String, task_type: TaskType, duration_secs: u64) -> TimerTask {
+    pub async fn add_task(
+        &self,
+        title: String,
+        task_type: TaskType,
+        duration_secs: u64,
+        category: Option<String>,
+        priority: Option<u32>,
+        repeat_rule: Option<RepeatRule>,
+        persistent: Option<bool>,
+    ) -> TimerTask {
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         let task = TimerTask {
             id: Uuid::new_v4().to_string(),
@@ -59,6 +114,11 @@ impl TimerManager {
             remaining_secs: duration_secs,
             status: TaskStatus::Running,
             created_at: now,
+            category,
+            priority,
+            repeat_rule,
+            persistent,
+            completed_at: None,
         };
 
         let mut tasks = self.tasks.lock().await;
@@ -67,13 +127,10 @@ impl TimerManager {
     }
 
     pub async fn cancel_task(&self, task_id: &str) -> bool {
-        // Mark the task as cancelled
         let mut tasks = self.tasks.lock().await;
         if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
             task.status = TaskStatus::Cancelled;
         }
-
-        // Set the cancel flag
         let flags = self.cancel_flags.lock().await;
         if let Some(pos) = flags.iter().position(|(id, _)| id == task_id) {
             flags[pos].1.store(true, Ordering::SeqCst);
@@ -83,7 +140,63 @@ impl TimerManager {
         }
     }
 
+    pub async fn complete_task(&self, task_id: &str) {
+        let mut tasks = self.tasks.lock().await;
+        if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
+            task.status = TaskStatus::Completed;
+            task.completed_at =
+                Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+        }
+    }
+
     pub async fn list_tasks(&self) -> Vec<TimerTask> {
+        let tasks = self.tasks.lock().await;
+        tasks.clone()
+    }
+
+    pub async fn get_stats(&self) -> TaskStats {
+        let tasks = self.tasks.lock().await;
+        let total = tasks.len();
+        let completed = tasks.iter().filter(|t| matches!(t.status, TaskStatus::Completed)).count();
+        let cancelled = tasks.iter().filter(|t| matches!(t.status, TaskStatus::Cancelled)).count();
+        let running = tasks.iter().filter(|t| matches!(t.status, TaskStatus::Running)).count();
+        let completion_rate = if total > 0 {
+            (completed as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        // 按分类统计
+        let mut cat_map: std::collections::HashMap<String, (usize, usize)> =
+            std::collections::HashMap::new();
+        for t in tasks.iter() {
+            let cat = t.category.clone().unwrap_or_else(|| "未分类".to_string());
+            let entry = cat_map.entry(cat).or_insert((0, 0));
+            entry.0 += 1;
+            if matches!(t.status, TaskStatus::Completed) {
+                entry.1 += 1;
+            }
+        }
+        let by_category: Vec<CategoryStat> = cat_map
+            .into_iter()
+            .map(|(category, (total, completed))| CategoryStat {
+                category,
+                total,
+                completed,
+            })
+            .collect();
+
+        TaskStats {
+            total,
+            completed,
+            cancelled,
+            running,
+            completion_rate,
+            by_category,
+        }
+    }
+
+    pub async fn export_data(&self) -> Vec<TimerTask> {
         let tasks = self.tasks.lock().await;
         tasks.clone()
     }

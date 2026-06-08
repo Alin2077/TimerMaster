@@ -5,6 +5,14 @@ interface SingleTimerProps {
   onTaskCreated: () => void;
 }
 
+const CATEGORIES = ["未分类", "工作", "休息", "吃药"];
+const CATEGORY_COLORS: Record<string, string> = {
+  "未分类": "var(--accent-blue)",
+  "工作": "var(--accent-orange)",
+  "休息": "var(--accent-green)",
+  "吃药": "var(--accent-red)",
+};
+
 function formatTime(secs: number): string {
   const m = Math.floor(secs / 60);
   const s = secs % 60;
@@ -16,6 +24,8 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
   const [minutes, setMinutes] = useState("");
   const [seconds, setSeconds] = useState("");
   const [loading, setLoading] = useState(false);
+  const [category, setCategory] = useState("未分类");
+  const [persistent, setPersistent] = useState(false);
 
   const handleStart = useCallback(async () => {
     const mins = parseInt(minutes) || 0;
@@ -34,6 +44,9 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
       await invoke("create_single_timer", {
         title: taskTitle,
         durationSecs: totalSecs,
+        category: category === "未分类" ? null : category,
+        priority: null as number | null,
+        persistent: persistent || null,
       });
       setTitle("");
       setMinutes("");
@@ -44,7 +57,7 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
     } finally {
       setLoading(false);
     }
-  }, [title, minutes, seconds, onTaskCreated]);
+  }, [title, minutes, seconds, category, persistent, onTaskCreated]);
 
   const presets = [
     { label: "5分钟", mins: 5 },
@@ -67,6 +80,29 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
           onChange={(e) => setTitle(e.target.value)}
           maxLength={30}
         />
+      </div>
+
+      {/* 分类选择 */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+        {CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setCategory(cat)}
+            style={{
+              padding: "4px 12px",
+              borderRadius: 12,
+              border: `1px solid ${
+                category === cat ? CATEGORY_COLORS[cat] : "var(--border-color)"
+              }`,
+              background: category === cat ? `${CATEGORY_COLORS[cat]}33` : "transparent",
+              color: category === cat ? CATEGORY_COLORS[cat] : "var(--text-secondary)",
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+          >
+            {cat}
+          </button>
+        ))}
       </div>
 
       <div className="presets">
@@ -104,6 +140,27 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
         />
         <span>秒</span>
       </div>
+
+      {/* 持续提醒选项 */}
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 12,
+          fontSize: 13,
+          color: "var(--text-secondary)",
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={persistent}
+          onChange={(e) => setPersistent(e.target.checked)}
+          style={{ accentColor: "var(--accent-blue)" }}
+        />
+        持续提醒（到点后重复通知，直到手动确认）
+      </label>
 
       <button
         className="btn btn-primary"

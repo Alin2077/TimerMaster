@@ -10,6 +10,9 @@ interface TimerTask {
   remaining_secs: number;
   status: "running" | "paused" | "completed" | "cancelled";
   created_at: string;
+  category?: string;
+  priority?: number;
+  persistent?: boolean;
 }
 
 interface TickEvent {
@@ -45,18 +48,17 @@ export default function RunningTimers() {
 
   useEffect(() => {
     fetchTasks();
+    const interval = setInterval(fetchTasks, 3000);
+    return () => clearInterval(interval);
   }, [fetchTasks]);
 
   useEffect(() => {
     const unlisten = listen<TickEvent>("timer-tick", (event) => {
       const { id, remaining } = event.payload;
       setTasks((prev) =>
-        prev.map((t) =>
-          t.id === id ? { ...t, remaining_secs: remaining } : t
-        )
+        prev.map((t) => (t.id === id ? { ...t, remaining_secs: remaining } : t))
       );
     });
-
     return () => {
       unlisten.then((fn) => fn());
     };
@@ -69,6 +71,18 @@ export default function RunningTimers() {
         fetchTasks();
       } catch (e) {
         console.error("Failed to cancel timer:", e);
+      }
+    },
+    [fetchTasks]
+  );
+
+  const handleComplete = useCallback(
+    async (taskId: string) => {
+      try {
+        await invoke("complete_task", { taskId });
+        fetchTasks();
+      } catch (e) {
+        console.error("Failed to complete task:", e);
       }
     },
     [fetchTasks]
@@ -92,7 +106,7 @@ export default function RunningTimers() {
         <div className="empty-state">
           <div className="emoji">⏳</div>
           <p>当前没有正在运行的任务</p>
-          <p style={{ marginTop: 4, fontSize: 12, color: "#555" }}>
+          <p style={{ marginTop: 4, fontSize: 12, color: "var(--text-muted)" }}>
             切换到「单次定时器」或「重复提醒」开始计时
           </p>
         </div>
@@ -104,7 +118,7 @@ export default function RunningTimers() {
     <div className="card">
       <div className="card-title">
         🎯 计时中
-        <span style={{ fontSize: 13, color: "#888", marginLeft: 8 }}>
+        <span style={{ fontSize: 13, color: "var(--text-secondary)", marginLeft: 8 }}>
           ({runningTasks.length})
         </span>
       </div>
@@ -114,17 +128,31 @@ export default function RunningTimers() {
           <div
             key={task.id}
             style={{
-              background: "#0f3460",
+              background: "var(--bg-input)",
               borderRadius: 16,
               padding: "20px 16px",
-              border: "1px solid #2a2a4a",
+              border: "1px solid var(--border-color)",
               textAlign: "center",
             }}
           >
-            <div style={{ fontSize: 13, color: "#888", marginBottom: 4 }}>
+            <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>
               {getTypeIcon(task.type)} {task.title}
+              {task.category && task.category !== "未分类" && (
+                <span
+                  style={{
+                    marginLeft: 6,
+                    fontSize: 11,
+                    padding: "1px 6px",
+                    borderRadius: 8,
+                    background: "var(--accent-blue-transparent)",
+                    color: "var(--accent-blue)",
+                  }}
+                >
+                  {task.category}
+                </span>
+              )}
               {task.type === "repeating" && (
-                <span style={{ marginLeft: 6, fontSize: 11, color: "#27ae60" }}>
+                <span style={{ marginLeft: 6, fontSize: 11, color: "var(--accent-green)" }}>
                   每{Math.floor(task.duration_secs / 60)}分钟
                 </span>
               )}
@@ -135,7 +163,7 @@ export default function RunningTimers() {
                 fontSize: 48,
                 fontWeight: 700,
                 fontVariantNumeric: "tabular-nums",
-                color: task.type === "repeating" ? "#27ae60" : "#667eea",
+                color: task.type === "repeating" ? "var(--accent-green)" : "var(--accent-blue)",
                 margin: "8px 0",
                 letterSpacing: 2,
               }}
@@ -143,19 +171,29 @@ export default function RunningTimers() {
               {formatTime(task.remaining_secs)}
             </div>
 
-            <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>
-              {task.type === "repeating"
-                ? "距离下次提醒"
-                : "剩余时间"}
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 12 }}>
+              {task.type === "repeating" ? "距离下次提醒" : "剩余时间"}
             </div>
 
-            <button
-              className="btn btn-danger"
-              onClick={() => handleCancel(task.id)}
-              style={{ fontSize: 12, padding: "6px 20px" }}
-            >
-              ⏹ 取消
-            </button>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+              {task.remaining_secs <= 0 || (task.duration_secs - task.remaining_secs) >= task.duration_secs ? (
+                <button
+                  className="btn btn-success"
+                  onClick={() => handleComplete(task.id)}
+                  style={{ fontSize: 12, padding: "6px 20px" }}
+                >
+                  ✅ 确认完成
+                </button>
+              ) : (
+                <button
+                  className="btn btn-danger"
+                  onClick={() => handleCancel(task.id)}
+                  style={{ fontSize: 12, padding: "6px 20px" }}
+                >
+                  ⏹ 取消
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>
