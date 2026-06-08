@@ -10,6 +10,7 @@ import { getVersion } from "@tauri-apps/api/app";
 
 type Tab = "single" | "repeating" | "running" | "list" | "stats" | "settings";
 const RELEASES_URL = "https://github.com/Alin2077/TimerMaster/releases/latest";
+// 加时间戳绕过缓存，确保拿到最新版本
 const UPDATER_CDN = "https://cdn.jsdelivr.net/gh/Alin2077/TimerMaster@master/updater.json";
 
 function parseVersion(v: string): number[] {
@@ -60,13 +61,28 @@ export default function App() {
     setUpdateMsg("检查中...");
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-      const res = await fetch(UPDATER_CDN, { signal: controller.signal });
-      clearTimeout(timeoutId);
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+      // 尝试 CDN（加时间戳防缓存）
+      const cdnUrl = UPDATER_CDN + "?t=" + Date.now();
+      let res = await fetch(cdnUrl, { signal: controller.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const latestVer = data.version;
+      let data = await res.json();
+      let latestVer = data.version;
       const currentVer = version.replace(/^v/, "");
+
+      // 如果 CDN 版本太旧，换 raw GitHub 再试
+      if (!isNewer(latestVer, currentVer)) {
+        const rawUrl = "https://raw.githubusercontent.com/Alin2077/TimerMaster/master/updater.json" + "?t=" + Date.now();
+        const res2 = await fetch(rawUrl, { signal: controller.signal });
+        if (res2.ok) {
+          const data2 = await res2.json();
+          latestVer = data2.version;
+        }
+      }
+
+      clearTimeout(timeoutId);
+
       if (isNewer(latestVer, currentVer)) {
         setUpdateMsg(`发现新版本 v${latestVer}，正在打开下载页面...`);
         window.open(RELEASES_URL, "_blank");
