@@ -167,6 +167,7 @@ async fn list_timers(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Arc::new(Mutex::new(AppState {
             timer_manager: Arc::new(TimerManager::new()),
         })))

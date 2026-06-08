@@ -3,3 +3,6 @@ dist/
 target/
 *.log
 .DS_Store
+
+# Tauri signing keys (keep secret!)
+.tauri/
