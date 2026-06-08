@@ -59,6 +59,30 @@ jobs:
               /tr http://timestamp.digicert.com /td SHA256 "$($file.FullName)"
           }
 
+      # 使用私钥签名安装包（用于自动更新校验）
+      - name: Sign installer for updater
+        shell: pwsh
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # 写入私钥到临时文件
+          $keyPath = Join-Path $env:RUNNER_TEMP "privatekey.pem"
+          $env:KEY | Out-File -FilePath $keyPath -Encoding ASCII -NoNewline
+
+          $installer = Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          if (-not $installer) {
+            Write-Host "::error::Installer not found!"
+            exit 1
+          }
+
+          Write-Host "Signing: $($installer.Name)"
+          npx tauri signer sign -k $keyPath -p $env:KEY_PASSWORD "$($installer.FullName)"
+          Write-Host "✅ Signature generated"
+
+          # 列出签名文件
+          Get-ChildItem "src-tauri/target/release/bundle/nsis/*.sig"
+
       # 生成 updater.json（自动更新元数据）
       - name: Generate updater.json
         shell: pwsh
@@ -73,7 +97,16 @@ jobs:
           $signature = ""
           if (Test-Path $sigFile) {
             $signature = Get-Content $sigFile -Raw | ForEach-Object { $_.Trim() }
+          } else {
+            # 尝试搜索其他 .sig 文件
+            $altSig = Get-ChildItem "src-tauri/target/release/bundle/nsis/*.sig" | Select-Object -First 1
+            if ($altSig) {
+              $signature = Get-Content $altSig.FullName -Raw | ForEach-Object { $_.Trim() }
+              Write-Host "Using sig file: $($altSig.Name)"
+            }
           }
+
+          Write-Host "Signature: $signature"
 
           # 构建下载 URL
           $downloadUrl = "https://github.com/Alin2077/TimerMaster/releases/download/$env:TAG_NAME/$installerName"
