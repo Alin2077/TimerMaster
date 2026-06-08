@@ -1,7 +1,7 @@
 mod timer;
 
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use timer::{TimerManager, TimerTask, TaskStatus, TaskType};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
@@ -163,6 +163,12 @@ async fn list_timers(
     Ok(state.timer_manager.list_tasks().await)
 }
 
+#[tauri::command]
+async fn minimize_to_tray(window: WebviewWindow) -> Result<(), String> {
+    let _ = window.hide();
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -171,11 +177,70 @@ pub fn run() {
         .manage(Arc::new(Mutex::new(AppState {
             timer_manager: Arc::new(TimerManager::new()),
         })))
+        .setup(|app| {
+            // ── 构建托盘菜单 ──
+            use tauri::menu::{Menu, MenuItem};
+
+            let show_item = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+            // ── 构建托盘图标 ──
+            use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .on_menu_event(move |app, event| {
+                    match event.id.as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            if window.is_visible().unwrap_or(false) {
+                                let _ = window.hide();
+                            } else {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    }
+                })
+                .tooltip("TimerMaster - 定时助手")
+                .build(app)?;
+
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            // 关闭窗口时隐藏到托盘而不是退出
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let _ = window.hide();
+                api.prevent_close();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             create_single_timer,
             create_repeating_timer,
             cancel_timer,
             list_timers,
+            minimize_to_tray,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
