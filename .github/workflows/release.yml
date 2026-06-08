@@ -73,10 +73,15 @@ jobs:
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
+        with:
+          name: TimerMaster-windows
+          path: ./release-assets
+
+      - name: List downloaded assets
+        run: ls -la ./release-assets/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            TimerMaster-windows/**
+          files: ./release-assets/**/*
           generate_release_notes: true
