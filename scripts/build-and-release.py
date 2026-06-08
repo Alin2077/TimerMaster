@@ -125,15 +125,30 @@ def main():
     updater_path = os.path.join(nsis_dir, "updater.json")
     with open(updater_path, "w") as f:
         json.dump(updater, f, indent=2)
-    print(f"  ✅ updater.json 已生成")
+
+    # 同时保存到项目根目录（供 jsDelivr CDN 加速访问）
+    repo_updater_path = os.path.join(PROJECT_DIR, "updater.json")
+    with open(repo_updater_path, "w") as f:
+        json.dump(updater, f, indent=2)
+    print(f"  ✅ updater.json 已生成（CDN 副本）")
 
     # ── 4. 生成更新日志 ──
     print("\n📝 步骤4: 生成更新日志...")
     release_notes = get_commit_log_since_last_tag()
     print(release_notes[:500])
 
-    # ── 5. 打 Git 标签 ──
-    print(f"\n🏷️  步骤5: 打标签 {tag}...")
+    # ── 5. 提交 updater.json 到 Git（供 CDN 同步） ──
+    print(f"\n📝 步骤5: 提交 updater.json...")
+    subprocess.run(["git", "add", "updater.json"], cwd=PROJECT_DIR,
+                   capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", f"chore: update updater.json for {tag}"],
+        cwd=PROJECT_DIR, capture_output=True,
+    )
+    subprocess.run(["git", "push"], cwd=PROJECT_DIR, capture_output=True)
+
+    # ── 6. 打 Git 标签 ──
+    print(f"\n🏷️  步骤6: 打标签 {tag}...")
     # 删除已存在的本地标签
     subprocess.run(["git", "tag", "-d", tag], cwd=PROJECT_DIR,
                    capture_output=True)

@@ -38,6 +38,7 @@
       "active": true,
       "dialog": true,
       "endpoints": [
+        "https://cdn.jsdelivr.net/gh/Alin2077/TimerMaster@master/updater.json",
         "https://github.com/Alin2077/TimerMaster/releases/latest/download/updater.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFGNDQ0NUJCQjM5MzgyQjAKUldTd2dwT3p1MFZFcnc3RTVEWXB4bE9WM2tyditUeUwrbUkrTXlXY3doYUxubGMxaVRLQWd0NTUK"

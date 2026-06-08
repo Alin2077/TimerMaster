@@ -8,7 +8,8 @@ import { getVersion } from "@tauri-apps/api/app";
 
 type Tab = "single" | "repeating" | "list";
 
-const TIMEOUT_SECS = 8;
+// GitHub 在国内访问较慢，超时设长一些
+const TIMEOUT_SECS = 30;
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("single");
