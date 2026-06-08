@@ -35,7 +35,7 @@
   },
   "plugins": {
     "updater": {
-      "active": false,
+      "active": true,
       "dialog": true,
       "endpoints": [
         "https://github.com/Alin2077/TimerMaster/releases/latest/download/updater.json"

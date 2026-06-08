@@ -1,16 +1,25 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import SingleTimer from "./components/SingleTimer";
 import RepeatingReminder from "./components/RepeatingReminder";
 import TaskList from "./components/TaskList";
 import { check } from "@tauri-apps/plugin-updater";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 
 type Tab = "single" | "repeating" | "list";
+
+const TIMEOUT_SECS = 8;
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("single");
   const [refreshKey, setRefreshKey] = useState(0);
   const [updating, setUpdating] = useState(false);
+  const [version, setVersion] = useState("");
+  const [updateMsg, setUpdateMsg] = useState("");
+
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => setVersion("1.0.2"));
+  }, []);
 
   const handleTaskCreated = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -18,17 +27,32 @@ export default function App() {
 
   const handleCheckUpdate = useCallback(async () => {
     setUpdating(true);
+    setUpdateMsg("检查中...");
+
+    // 超时保护——避免请求卡死
+    const timeout = setTimeout(() => {
+      setUpdating(false);
+      setUpdateMsg("检查超时，请检查网络后重试");
+    }, TIMEOUT_SECS * 1000);
+
     try {
       const update = await check();
+      clearTimeout(timeout);
+
       if (update) {
+        setUpdateMsg(`发现新版本 ${update.version}，开始下载...`);
         await update.downloadAndInstall();
+      } else {
+        setUpdateMsg(`✓ 已是最新版本 (v${version})`);
       }
     } catch (e) {
-      console.log("No update available or check failed:", e);
+      clearTimeout(timeout);
+      setUpdateMsg("检查失败，请检查网络连接");
+      console.error("Update check failed:", e);
     } finally {
       setUpdating(false);
     }
-  }, []);
+  }, [version]);
 
   const handleMinimizeToTray = useCallback(async () => {
     try {
@@ -41,7 +65,7 @@ export default function App() {
   return (
     <div className="container">
       <div className="header">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <h1>⏱ TimerMaster</h1>
             <p>定时提醒 · 守护健康</p>
@@ -58,28 +82,35 @@ export default function App() {
               fontSize: 18,
               cursor: "pointer",
               lineHeight: 1,
+              marginTop: 2,
             }}
           >
             🔽
           </button>
         </div>
-        <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginTop: 4 }}>
+          <span style={{ fontSize: 12, color: "#666" }}>v{version}</span>
           <button
             onClick={handleCheckUpdate}
             disabled={updating}
             style={{
-              padding: "4px 14px",
+              padding: "3px 12px",
               background: "transparent",
               border: "1px solid #444",
               borderRadius: 6,
               color: "#888",
               fontSize: 12,
-              cursor: "pointer",
+              cursor: updating ? "not-allowed" : "pointer",
             }}
           >
             {updating ? "🔍 检查中..." : "🔄 检查更新"}
           </button>
         </div>
+        {updateMsg && (
+          <div style={{ textAlign: "center", fontSize: 11, color: "#999", marginTop: 2 }}>
+            {updateMsg}
+          </div>
+        )}
       </div>
 
       <div className="tabs">

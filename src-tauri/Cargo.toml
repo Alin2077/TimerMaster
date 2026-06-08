@@ -1,6 +1,6 @@
 [package]
 name = "timer-master"
-version = "1.0.2"
+version = "1.0.3"
 description = "A desktop timer app with system notifications"
 authors = ["you"]
 edition = "2021"
