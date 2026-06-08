@@ -35,7 +35,7 @@
   },
   "plugins": {
     "updater": {
-      "active": true,
+      "active": false,
       "dialog": true,
       "endpoints": [
         "https://cdn.jsdelivr.net/gh/Alin2077/TimerMaster@master/updater.json",

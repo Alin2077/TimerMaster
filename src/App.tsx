@@ -3,23 +3,40 @@ import SingleTimer from "./components/SingleTimer";
 import RepeatingReminder from "./components/RepeatingReminder";
 import RunningTimers from "./components/RunningTimers";
 import TaskList from "./components/TaskList";
-import { check } from "@tauri-apps/plugin-updater";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 
 type Tab = "single" | "repeating" | "running" | "list";
 
-const TIMEOUT_SECS = 30;
+const RELEASES_URL = "https://github.com/Alin2077/TimerMaster/releases/latest";
+// jsDelivr CDN — 国内访问快，不需要翻墙
+const UPDATER_CDN = "https://cdn.jsdelivr.net/gh/Alin2077/TimerMaster@master/updater.json";
+
+function parseVersion(v: string): number[] {
+  return v.replace(/^v/, "").split(".").map(Number);
+}
+
+function isNewer(latest: string, current: string): boolean {
+  const a = parseVersion(latest);
+  const b = parseVersion(current);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const na = a[i] || 0;
+    const nb = b[i] || 0;
+    if (na > nb) return true;
+    if (na < nb) return false;
+  }
+  return false;
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("single");
   const [refreshKey, setRefreshKey] = useState(0);
-  const [updating, setUpdating] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [version, setVersion] = useState("");
   const [updateMsg, setUpdateMsg] = useState("");
 
   useEffect(() => {
-    getVersion().then(setVersion).catch(() => setVersion("1.0.4"));
+    getVersion().then(setVersion).catch(() => setVersion("1.0.5"));
   }, []);
 
   const handleTaskCreated = useCallback(() => {
@@ -27,30 +44,43 @@ export default function App() {
   }, []);
 
   const handleCheckUpdate = useCallback(async () => {
-    setUpdating(true);
+    setChecking(true);
     setUpdateMsg("检查中...");
 
-    const timeout = setTimeout(() => {
-      setUpdating(false);
-      setUpdateMsg("检查超时，请检查网络后重试");
-    }, TIMEOUT_SECS * 1000);
-
     try {
-      const update = await check();
-      clearTimeout(timeout);
+      // 用 AbortController 实现超时（15秒）
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-      if (update) {
-        setUpdateMsg(`发现新版本 ${update.version}，开始下载...`);
-        await update.downloadAndInstall();
-      } else {
-        setUpdateMsg(`✓ 已是最新版本 (v${version})`);
+      const res = await fetch(UPDATER_CDN, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
       }
-    } catch (e) {
-      clearTimeout(timeout);
-      setUpdateMsg("检查失败，请检查网络连接");
-      console.error("Update check failed:", e);
+
+      const data = await res.json();
+      const latestVer = data.version;
+      const currentVer = version.replace(/^v/, "");
+
+      console.log(`Current: v${currentVer}, Latest: v${latestVer}`);
+
+      if (isNewer(latestVer, currentVer)) {
+        setUpdateMsg(`发现新版本 v${latestVer}，正在打开下载页面...`);
+        // 打开浏览器到 Releases 页面
+        window.open(RELEASES_URL, "_blank");
+      } else {
+        setUpdateMsg(`✓ 已是最新版本 (v${currentVer})`);
+      }
+    } catch (e: any) {
+      if (e?.name === "AbortError") {
+        setUpdateMsg("检查超时，请稍后重试");
+      } else {
+        setUpdateMsg("检查失败，请检查网络连接");
+      }
+      console.error("Update check error:", e);
     } finally {
-      setUpdating(false);
+      setChecking(false);
     }
   }, [version]);
 
@@ -92,7 +122,7 @@ export default function App() {
           <span style={{ fontSize: 12, color: "#666" }}>v{version}</span>
           <button
             onClick={handleCheckUpdate}
-            disabled={updating}
+            disabled={checking}
             style={{
               padding: "3px 12px",
               background: "transparent",
@@ -100,14 +130,14 @@ export default function App() {
               borderRadius: 6,
               color: "#888",
               fontSize: 12,
-              cursor: updating ? "not-allowed" : "pointer",
+              cursor: checking ? "not-allowed" : "pointer",
             }}
           >
-            {updating ? "🔍 检查中..." : "🔄 检查更新"}
+            {checking ? "🔍 检查中..." : "🔄 检查更新"}
           </button>
         </div>
         {updateMsg && (
-          <div style={{ textAlign: "center", fontSize: 11, color: "#999", marginTop: 2 }}>
+          <div style={{ textAlign: "center", fontSize: 11, color: "#999", marginTop: 4 }}>
             {updateMsg}
           </div>
         )}
