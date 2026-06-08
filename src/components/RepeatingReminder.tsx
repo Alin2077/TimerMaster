@@ -12,13 +12,20 @@ interface RepeatingReminderProps {
   onTaskCreated: () => void;
 }
 
-const FORTY_FIVE_MIN = 45 * 60; // 2700 seconds
-
 function formatTime(secs: number): string {
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
+
+const PRESETS = [
+  { label: "15分钟", mins: 15 },
+  { label: "30分钟", mins: 30 },
+  { label: "45分钟", mins: 45 },
+  { label: "60分钟", mins: 60 },
+  { label: "90分钟", mins: 90 },
+  { label: "120分钟", mins: 120 },
+];
 
 export default function RepeatingReminder({
   onTaskCreated,
@@ -29,6 +36,8 @@ export default function RepeatingReminder({
     total: number;
   } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [minutes, setMinutes] = useState("45");
+  const [customTitle, setCustomTitle] = useState("");
 
   useEffect(() => {
     const unlisten = listen<TickEvent>("timer-tick", (event) => {
@@ -47,16 +56,20 @@ export default function RepeatingReminder({
   }, []);
 
   const handleStart = useCallback(async () => {
+    const mins = parseInt(minutes) || 45;
+    const intervalSecs = mins * 60;
+    const title = customTitle.trim() || `每${mins}分钟提醒`;
+
     setLoading(true);
     try {
-      const result = await invoke("create_repeating_timer", {
-        title: "起身活动提醒",
-        intervalSecs: FORTY_FIVE_MIN,
-      }) as { id: string };
+      const result = (await invoke("create_repeating_timer", {
+        title,
+        intervalSecs,
+      })) as { id: string };
       setActiveTask({
         id: result.id,
-        remaining: FORTY_FIVE_MIN,
-        total: FORTY_FIVE_MIN,
+        remaining: intervalSecs,
+        total: intervalSecs,
       });
       onTaskCreated();
     } catch (e) {
@@ -64,7 +77,7 @@ export default function RepeatingReminder({
     } finally {
       setLoading(false);
     }
-  }, [onTaskCreated]);
+  }, [minutes, customTitle, onTaskCreated]);
 
   const handleStop = useCallback(async () => {
     if (!activeTask) return;
@@ -81,43 +94,75 @@ export default function RepeatingReminder({
     <div className="card">
       <div className="card-title">🔄 重复提醒</div>
 
-      <div className="quick-reminder">
-        <div className="big-icon">🧘</div>
-        <div className="desc">
-          每 <strong>45 分钟</strong>提醒起身活动，保护腰椎和视力
-        </div>
-
-        {activeTask ? (
-          <>
-            <div className="timer-display">
-              {formatTime(activeTask.remaining)}
-            </div>
-            <div className="interval-info">
-              <span className="active-badge">● 运行中</span>
-              &nbsp; 距离下次提醒还有 {formatTime(activeTask.remaining)}
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <button className="btn btn-danger" onClick={handleStop}>
-                ⏹ 停止提醒
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ fontSize: 32, fontWeight: 700, color: "#27ae60", marginBottom: 12 }}>
-              45:00
-            </div>
-            <button
-              className="btn btn-success"
-              onClick={handleStart}
-              disabled={loading}
-              style={{ minWidth: 200 }}
-            >
-              {loading ? "⏳ 启动中..." : "▶ 启动循环提醒"}
+      {activeTask ? (
+        <div className="quick-reminder">
+          <div className="big-icon">🧘</div>
+          <div className="timer-display">{formatTime(activeTask.remaining)}</div>
+          <div className="interval-info">
+            <span className="active-badge">● 运行中</span>
+            &nbsp; 距离下次提醒还有 {formatTime(activeTask.remaining)}
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <button className="btn btn-danger" onClick={handleStop}>
+              ⏹ 停止提醒
             </button>
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="input-group">
+            <input
+              type="text"
+              placeholder="备注（可选）"
+              value={customTitle}
+              onChange={(e) => setCustomTitle(e.target.value)}
+              maxLength={30}
+            />
+          </div>
+
+          <div className="presets">
+            {PRESETS.map((p) => (
+              <button
+                key={p.label}
+                className="preset-btn"
+                onClick={() => setMinutes(String(p.mins))}
+                style={
+                  parseInt(minutes) === p.mins
+                    ? {
+                        background: "#27ae6033",
+                        borderColor: "#27ae60",
+                        color: "#27ae60",
+                      }
+                    : undefined
+                }
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="time-input-row">
+            <input
+              type="number"
+              min="1"
+              max="999"
+              placeholder="间隔"
+              value={minutes}
+              onChange={(e) => setMinutes(e.target.value)}
+            />
+            <span>分钟</span>
+          </div>
+
+          <button
+            className="btn btn-success"
+            onClick={handleStart}
+            disabled={loading}
+            style={{ width: "100%" }}
+          >
+            {loading ? "⏳ 启动中..." : `▶ 每 ${minutes} 分钟循环提醒`}
+          </button>
+        </>
+      )}
     </div>
   );
 }
