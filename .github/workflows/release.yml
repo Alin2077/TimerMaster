@@ -29,77 +29,38 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
-      # Tauri build 会自动签名（因为 updater.active:true + 环境变量已设置）
       - name: Build Tauri app
         run: npm run tauri build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
-      # 代码签名（可选）—— 消除 Windows Defender 警告
+      # 可选：代码签名（消除 Windows Defender 警告）
       - name: Sign binaries (optional)
         shell: pwsh
         env:
           CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
           CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
-          if (-not $env:CERT_BASE64) {
-            Write-Host "::warning::WINDOWS_CERT_BASE64 未配置，跳过代码签名"
-            exit 0
-          }
+          if (-not $env:CERT_BASE64) { exit 0 }
           $certBytes = [Convert]::FromBase64String($env:CERT_BASE64)
           $certPath = Join-Path $env:RUNNER_TEMP "cert.pfx"
           [IO.File]::WriteAllBytes($certPath, $certBytes)
-          $files = Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -Include "*.exe"
+          $files = Get-ChildItem "src-tauri/target/release/bundle" -Recurse -Include "*.exe"
           $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" |
                       Select-Object -First 1 -ExpandProperty FullName
           foreach ($file in $files) {
-            Write-Host "Signing: $($file.Name)"
             & $signtool sign /fd SHA256 /f $certPath /p $env:CERT_PASSWORD `
               /tr http://timestamp.digicert.com /td SHA256 "$($file.FullName)"
           }
 
-      # 查找签名文件并生成 updater.json
-      - name: Generate updater.json
-        shell: pwsh
+      # 签名安装包 + 生成 updater.json
+      - name: Sign and generate updater.json
+        run: python scripts/sign_and_generate_updater.py
         env:
           TAG_NAME: ${{ github.ref_name }}
-        run: |
-          $version = $env:TAG_NAME -replace '^v', ''
-          $installerName = "TimerMaster_${version}_x64-setup.exe"
-          $nsisDir = "src-tauri/target/release/bundle/nsis"
-
-          # 查找 .sig 文件（Tauri 构建自动生成）
-          $sigFiles = Get-ChildItem "$nsisDir/*.sig"
-          $signature = ""
-          if ($sigFiles) {
-            $sigFile = $sigFiles | Select-Object -First 1
-            $signature = Get-Content $sigFile.FullName -Raw | ForEach-Object { $_.Trim() }
-            Write-Host "Found signature: $($sigFile.Name)"
-          } else {
-            Write-Host "::warning::No .sig file found - update signature will be empty"
-          }
-
-          Write-Host "Signature: [$($signature.Substring(0, [Math]::Min(40, $signature.Length)))]"
-
-          $downloadUrl = "https://github.com/Alin2077/TimerMaster/releases/download/$env:TAG_NAME/$installerName"
-
-          $updater = @{
-            version = $version
-            notes = "TimerMaster $version"
-            pub_date = (Get-Date -Format "o")
-            platforms = @{
-              "windows-x86_64" = @{
-                signature = $signature
-                url = $downloadUrl
-              }
-            }
-          }
-
-          $updaterPath = "$nsisDir/updater.json"
-          $updater | ConvertTo-Json -Depth 10 | Out-File -FilePath $updaterPath -Encoding UTF8
-          Write-Host "✅ updater.json generated"
-          Get-Content $updaterPath | Select-Object -First 5
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -123,9 +84,6 @@ jobs:
         with:
           name: TimerMaster-windows
           path: ./release-assets
-
-      - name: List downloaded assets
-        run: ls -la ./release-assets/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
