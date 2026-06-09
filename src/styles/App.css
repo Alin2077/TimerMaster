@@ -43,12 +43,15 @@ body {
   color: var(--text-primary);
   user-select: none;
   transition: background 0.3s, color 0.3s;
+  overflow-y: auto;
+  height: 100vh;
 }
 
 .container {
   max-width: 460px;
   margin: 0 auto;
   padding: 20px;
+  min-height: calc(100vh - 40px);
 }
 
 .header {

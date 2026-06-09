@@ -14,9 +14,10 @@
       {
         "title": "TimerMaster - \u5b9a\u65f6\u52a9\u624b",
         "width": 480,
-        "height": 640,
+        "height": 720,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "center": true
       }
     ],
     "security": {
