@@ -10,6 +10,10 @@ interface TimerTask {
   remaining_secs: number;
   status: "running" | "paused" | "completed" | "cancelled";
   created_at: string;
+  category?: string;
+  priority?: number;
+  persistent?: boolean;
+  scheduled_at?: string;
 }
 
 interface TickEvent {
@@ -125,21 +129,36 @@ export default function TaskList() {
         </div>
       ) : (
         <div className="task-list">
-          {sortedTasks.map((task) => (
+          {sortedTasks.map((task, idx) => {
+            const catColor = task.category === "工作" ? "var(--accent-orange)"
+              : task.category === "休息" ? "var(--accent-green)"
+              : task.category === "吃药" ? "var(--accent-red)"
+              : "var(--accent-blue)";
+            return (
             <div
               key={task.id}
               className={`task-item ${task.status}`}
+              style={{ display: "flex", gap: 12, alignItems: "center", padding: "14px" }}
             >
-              <div className="task-info">
-                <div className="task-title">{task.title}</div>
-                <div className="task-meta">
-                  {task.status === "running" ? (
-                    <span style={{ color: "#f39c12", fontWeight: 600 }}>
+              <div className="task-cat-bar" style={{ background: catColor, height: 40 }} />
+              <div className="task-info" style={{ flex: 1, minWidth: 0 }}>
+                <div className="task-title" style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                    {task.title}
+                  </span>
+                  {task.status === "running" && (
+                    <span style={{
+                      fontSize: 16, fontWeight: 700, fontVariantNumeric: "tabular-nums",
+                      color: task.remaining_secs <= 10 ? "#e74c3c" : "#f39c12",
+                      marginLeft: 8, flexShrink: 0,
+                    }}>
                       {formatTime(task.remaining_secs)}
                     </span>
-                  ) : (
-                    <span>{formatTime(task.duration_secs)}</span>
                   )}
+                </div>
+                <div className="task-meta" style={{ marginTop: 4, display: "flex", gap: 4, flexWrap: "wrap" }}>
                   <span className={`tag tag-${task.type}`}>
                     {getTypeLabel(task.type)}
                   </span>
@@ -166,7 +185,8 @@ export default function TaskList() {
                 </button>
               )}
             </div>
-          ))}
+            ); // close return
+          })}
         </div>
       )}
     </div>

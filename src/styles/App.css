@@ -445,3 +445,34 @@ button:active {
   animation: glow 1.5s ease-in-out infinite;
   border-color: var(--accent-green) !important;
 }
+
+
+/* ── 列表项依次入场 ── */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.task-item {
+  animation: slideIn 0.25s ease-out both;
+}
+.task-item:nth-child(1) { animation-delay: 0.00s; }
+.task-item:nth-child(2) { animation-delay: 0.05s; }
+.task-item:nth-child(3) { animation-delay: 0.10s; }
+.task-item:nth-child(4) { animation-delay: 0.15s; }
+.task-item:nth-child(5) { animation-delay: 0.20s; }
+.task-item:nth-child(6) { animation-delay: 0.25s; }
+.task-item:nth-child(7) { animation-delay: 0.30s; }
+.task-item:nth-child(8) { animation-delay: 0.35s; }
+.task-item:nth-child(9) { animation-delay: 0.40s; }
+
+/* ── 悬浮效果 ── */
+.task-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  border-color: var(--accent-blue) !important;
+}
+
+/* ── 分类色条 ── */
+.task-cat-bar {
+  width: 4px; border-radius: 2px; flex-shrink: 0;
+}
