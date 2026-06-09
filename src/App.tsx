@@ -11,79 +11,107 @@ import { listen } from "@tauri-apps/api/event";
 
 type Tab = "create" | "running" | "list" | "stats" | "settings";
 
-interface UpdateProgress {
-  visible: boolean;
-  status: string;
-  detail: string;
-  progress: number;
-  error: boolean;
-}
+/** 更新状态：null=无更新，pending=可下载，ready=已下载可安装，downloading=下载中，error=失败 */
+type UpdateState = {
+  version: string;
+  status: "pending" | "ready" | "downloading" | "error";
+  progress?: number;
+} | null;
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("create");
   const [refreshKey, setRefreshKey] = useState(0);
   const [version, setVersion] = useState("");
-  const [updateMsg, setUpdateMsg] = useState("");
-  const [updateProg, setUpdateProg] = useState<UpdateProgress>({
-    visible: false, status: "", detail: "", progress: 0, error: false,
-  });
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  // 更新相关
+  const updateObjRef = useRef<any>(null);
+  const [updateState, setUpdateState] = useState<UpdateState>(null);
   const checkingRef = useRef(false);
 
+  // ── 初始化 ──
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion("4.8.0"));
     const saved = localStorage.getItem("timermaster-theme");
     if (saved === "light") { setTheme("light"); document.body.className = "light"; }
   }, []);
 
+  // ── 开机后静默检测更新 ──
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!checkingRef.current) {
+        checkingRef.current = true;
+        check().then((update) => {
+          if (update) {
+            updateObjRef.current = update;
+            setUpdateState({ version: update.version, status: "pending" });
+          }
+        }).catch(() => {
+          // 网络不佳，静默忽略
+        }).finally(() => {
+          checkingRef.current = false;
+        });
+      }
+    }, 4000); // 启动后 4 秒再检查，不抢首屏
+    return () => clearTimeout(timer);
+  }, []);
+
+  // ── 监听更新进度事件 ──
   useEffect(() => {
     const unlisten = listen<{ status: string; detail?: string; progress?: number }>(
       "tauri://update-status", (ev) => {
         const p = ev.payload;
         switch (p.status) {
-          case "CHECKING":
-            setUpdateProg((s) => ({ ...s, status: "检查更新...", detail: "", progress: 10 })); break;
           case "DOWNLOADING":
-            setUpdateProg((s) => ({ ...s, status: "正在下载...", detail: p.detail ? `${(+p.detail / 1024 / 1024).toFixed(1)} MB` : "", progress: p.progress || 0 })); break;
+            setUpdateState((s) => s ? { ...s, status: "downloading", progress: p.progress || 0 } : s);
+            break;
           case "DOWNLOADED":
-            setUpdateProg((s) => ({ ...s, status: "下载完成", detail: "正在安装...", progress: 95 })); break;
+            setUpdateState((s) => s ? { ...s, status: "ready", progress: 100 } : s);
+            break;
           case "INSTALLING":
-            setUpdateProg((s) => ({ ...s, status: "正在安装...", progress: 98 })); break;
-          case "DONE":
-            setUpdateProg((s) => ({ ...s, status: "更新完成！", detail: "应用将自动重启", progress: 100 }));
-            setTimeout(() => setUpdateProg((s) => ({ ...s, visible: false })), 2000); break;
+            setUpdateState((s) => s ? { ...s, status: "downloading", progress: 99, version: s.version + " 安装中..." } : s);
+            break;
           case "ERROR":
-            setUpdateProg((s) => ({ ...s, status: "更新失败", detail: p.detail || "请稍后重试", progress: 0, error: true })); break;
+            setUpdateState((s) => s ? { ...s, status: "error", progress: 0 } : s);
+            break;
         }
       }
     );
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
-  const handleCheckUpdate = useCallback(async () => {
+  // ── 点击安装更新 ──
+  const handleInstallUpdate = useCallback(async () => {
+    const upd = updateObjRef.current;
+    if (!upd) return;
+    if (updateState?.status === "pending") {
+      setUpdateState((s) => s ? { ...s, status: "downloading", progress: 0 } : s);
+      try {
+        await upd.downloadAndInstall();
+      } catch {
+        setUpdateState((s) => s ? { ...s, status: "error" } : s);
+      }
+    }
+  }, [updateState]);
+
+  // ── 手动检查更新 ──
+  const handleManualCheck = useCallback(async () => {
     if (checkingRef.current) return;
     checkingRef.current = true;
-    setUpdateMsg("检查中...");
-    setUpdateProg({ visible: true, status: "检查更新...", detail: "", progress: 5, error: false });
     try {
-      const update = await check();
-      if (!update) {
-        setUpdateProg((p) => ({ ...p, visible: false }));
-        setUpdateMsg(`✓ 已是最新版本 (v${version})`);
-        checkingRef.current = false;
-        return;
+      const upd = await check();
+      if (upd) {
+        updateObjRef.current = upd;
+        setUpdateState({ version: upd.version, status: "pending" });
+      } else {
+        setUpdateState(null);
       }
-      setUpdateProg((p) => ({ ...p, status: `发现新版本 v${update.version}`, detail: "开始下载...", progress: 15 }));
-      setUpdateMsg(`发现新版本 v${update.version}，正在下载...`);
-      await update.downloadAndInstall();
-      setUpdateMsg(`✅ 更新完成 (v${update.version})`);
-    } catch (e: any) {
-      setUpdateProg((p) => ({ ...p, visible: false, status: "更新失败", detail: String(e?.message || e), error: true }));
-      setUpdateMsg("更新失败，请稍后再试");
+    } catch {
+      // 网络失败，静默
     } finally {
       checkingRef.current = false;
     }
-  }, [version]);
+  }, []);
 
   const handleThemeChange = useCallback((t: "dark" | "light") => {
     setTheme(t); document.body.className = t === "light" ? "light" : "";
@@ -94,7 +122,9 @@ export default function App() {
     setActiveTab("running");
   }, []);
 
-  const handleMinimize = useCallback(async () => { try { await invoke("minimize_to_tray"); } catch (_) {} }, []);
+  const handleMinimize = useCallback(async () => {
+    try { await invoke("minimize_to_tray"); } catch (_) {}
+  }, []);
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "create", label: "➕ 新建" },
@@ -103,6 +133,25 @@ export default function App() {
     { key: "stats", label: "📊 统计" },
     { key: "settings", label: "⚙️ 设置" },
   ];
+
+  // 更新按钮的显示
+  let updateBadge: { text: string; color: string; onClick: () => void } | null = null;
+  if (updateState) {
+    switch (updateState.status) {
+      case "pending":
+        updateBadge = { text: `⬇️ v${updateState.version} 可下载`, color: "var(--accent-blue)", onClick: handleInstallUpdate };
+        break;
+      case "downloading":
+        updateBadge = { text: `⏳ 下载中 ${updateState.progress || 0}%`, color: "var(--accent-orange)", onClick: () => {} };
+        break;
+      case "ready":
+        updateBadge = { text: `✅ 安装更新 v${updateState.version}`, color: "var(--accent-green)", onClick: handleInstallUpdate };
+        break;
+      case "error":
+        updateBadge = { text: `⚠️ v${updateState.version} 下载失败`, color: "var(--accent-orange)", onClick: handleManualCheck };
+        break;
+    }
+  }
 
   return (
     <div className="container">
@@ -117,14 +166,28 @@ export default function App() {
             🔽
           </button>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginTop: 4 }}>
+
+        {/* 版本号 + 更新状态 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "center", marginTop: 4, flexWrap: "wrap" }}>
           <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>v{version}</span>
-          <button onClick={handleCheckUpdate} disabled={updateProg.visible}
-            style={{ padding: "3px 12px", background: "transparent", border: "1px solid var(--border-color)", borderRadius: 6, color: "var(--text-secondary)", fontSize: 12, cursor: updateProg.visible ? "not-allowed" : "pointer" }}>
-            {updateProg.visible ? "⏳ 更新中..." : "🔄 检查更新"}
-          </button>
+
+          {updateBadge ? (
+            <button onClick={updateBadge.onClick} disabled={updateState?.status === "downloading"}
+              style={{
+                padding: "3px 12px", borderRadius: 12, border: "none",
+                background: updateBadge.color, color: "#fff", fontSize: 11,
+                cursor: updateState?.status === "downloading" ? "not-allowed" : "pointer",
+                fontWeight: 500,
+              }}>
+              {updateBadge.text}
+            </button>
+          ) : (
+            <button onClick={handleManualCheck}
+              style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border-color)", borderRadius: 6, color: "var(--text-secondary)", fontSize: 11, cursor: "pointer" }}>
+              🔄 检查
+            </button>
+          )}
         </div>
-        {updateMsg && <div style={{ textAlign: "center", fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>{updateMsg}</div>}
       </div>
 
       <div className="tabs" style={{ display: "flex" }}>
@@ -145,24 +208,8 @@ export default function App() {
       {activeTab === "settings" && <Settings theme={theme} onThemeChange={handleThemeChange} />}
 
       <div style={{ textAlign: "center", marginTop: 16, fontSize: 11, color: "var(--text-muted)" }}>
-        <p>关闭窗口 = 最小化托盘 · 快捷键 Ctrl+Shift+T 切换</p>
+        <p>关闭窗口 = 最小化托盘 · 快捷键 Ctrl+Shift+T · 后台自动检查更新</p>
       </div>
-
-      {updateProg.visible && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)" }}>
-          <div style={{ background: "var(--bg-card)", borderRadius: 16, padding: "28px 24px", width: 320, border: "1px solid var(--border-color)", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
-            <div style={{ textAlign: "center", marginBottom: 16 }}>
-              <div style={{ fontSize: 36, marginBottom: 8 }}>{updateProg.error ? "❌" : updateProg.progress >= 100 ? "✅" : "⏳"}</div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>{updateProg.status}</div>
-              <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>{updateProg.detail}</div>
-            </div>
-            <div style={{ height: 6, background: "var(--bg-input)", borderRadius: 3, overflow: "hidden", marginBottom: 16 }}>
-              <div style={{ height: "100%", width: `${updateProg.progress}%`, background: updateProg.error ? "var(--accent-red)" : "linear-gradient(90deg, var(--accent-blue), var(--accent-purple))", borderRadius: 3, transition: "width 0.3s" }} />
-            </div>
-            {updateProg.error && <button onClick={() => setUpdateProg((p) => ({ ...p, visible: false }))} className="btn btn-primary">关闭</button>}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
