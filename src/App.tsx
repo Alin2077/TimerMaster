@@ -83,19 +83,17 @@ const [checkingManual, setCheckingManual] = useState(false);
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
-  // ── 点击安装更新 ──
+  // ── 安装更新（直接打开浏览器到 GitHub Releases，绕过签名问题）──
   const handleInstallUpdate = useCallback(async () => {
     const upd = updateObjRef.current;
     if (!upd) return;
     if (updateState?.status === "pending") {
-      setUpdateState((s) => s ? { ...s, status: "downloading", progress: 0 } : s);
-      try {
-        await upd.downloadAndInstall();
-      } catch {
-        setUpdateState((s) => s ? { ...s, status: "error" } : s);
-      }
+      setUpdateState((s) => s ? { ...s, status: "downloading" } : s);
+      toast("正在打开下载页面...", "info");
+      window.open(`https://github.com/Alin2077/TimerMaster/releases/tag/v${upd.version}`, "_blank");
+      setTimeout(() => setUpdateState(null), 2000);
     }
-  }, [updateState]);
+  }, [updateState, toast]);
 
   // ── 手动检查更新 ──
   const handleManualCheck = useCallback(async () => {
@@ -148,7 +146,7 @@ const [checkingManual, setCheckingManual] = useState(false);
         updateBadge = { text: `⏳ 下载中 ${updateState.progress || 0}%`, color: "var(--accent-orange)", onClick: () => {} };
         break;
       case "ready":
-        updateBadge = { text: `✅ 安装更新 v${updateState.version}`, color: "var(--accent-green)", onClick: () => { handleInstallUpdate(); toast("🚀 开始安装更新...", "info"); } };
+        updateBadge = { text: `✅ 安装更新 v${updateState.version}`, color: "var(--accent-green)", onClick: () => { handleInstallUpdate(); toast("正在打开下载页面...", "info"); } };
         break;
       case "error":
         updateBadge = { text: `⚠️ v${updateState.version} 下载失败`, color: "var(--accent-orange)", onClick: handleManualCheck };
