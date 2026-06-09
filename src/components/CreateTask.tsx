@@ -38,9 +38,9 @@ function nowStr(): string {
 export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
   const toast = useToast();
   const [mode, setMode] = useState<TaskMode>("countdown");
+  const [modeKey, setModeKey] = useState(0);
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(false);
-  const [animKey, setAnimKey] = useState(0);
 
   const [minutes, setMinutes] = useState("");
   const [seconds, setSeconds] = useState("");
@@ -118,27 +118,23 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
   }, [mode, title, minutes, seconds, scheduledAt, repeatType, intervalMin, weekDay, monthDay,
       category, actionType, actionPath, persistent, onTaskCreated]);
 
-  const S = ({ idx, children, style }: { idx: number; children: React.ReactNode; style?: React.CSSProperties }) => (
-    <div className="section-anim" style={{ ...style }} key={`s-${animKey}-${idx}`}>
-      {children}
-    </div>
-  );
-
   return (
     <div className="card">
       <div className="card-title">➕ 新建任务</div>
 
-      <S idx={0}>
+      {/* 标题 — 静态 */}
+      <div className="section-anim">
         <div className="input-group">
           <input type="text" placeholder="备注（可选）" value={title}
             onChange={(e) => setTitle(e.target.value)} maxLength={30} />
         </div>
-      </S>
+      </div>
 
-      <S idx={1}>
+      {/* 模式切换 — 静态 */}
+      <div className="section-anim">
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           {(["countdown", "scheduled"] as TaskMode[]).map((m) => (
-            <button key={m} onClick={() => { setMode(m); setAnimKey((k) => k + 1); }}
+            <button key={m} onClick={() => { setMode(m); setModeKey((k) => k + 1); }}
               className={mode === m ? "btn-bounce" : ""}
               style={{
                 flex: 1, padding: "10px 0", borderRadius: 10,
@@ -152,40 +148,41 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
             </button>
           ))}
         </div>
-      </S>
+      </div>
 
-      {/* 倒计时 / 指定时间 */}
-      {mode === "countdown" ? (
-        <S idx={2}>
-          <div className="presets">
-            {COUNTDOWN_PRESETS.map((p) => (
-              <button key={p.label} className="preset-btn"
-                onClick={() => { setMinutes(String(p.mins)); setSeconds("0"); setAnimKey((k) => k + 1); }}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-          <div className="time-input-row" key={`nums-${animKey}`}>
-            <input type="number" min="0" max="999" placeholder="分" value={minutes}
-              onChange={(e) => setMinutes(e.target.value)} className="num-anim" />
-            <span>分</span>
-            <input type="number" min="0" max="59" placeholder="秒" value={seconds}
-              onChange={(e) => setSeconds(e.target.value)} className="num-anim" />
-            <span>秒</span>
-          </div>
-        </S>
-      ) : (
-        <S idx={2}>
+      {/* ── 动态内容区：切换 mode 时只这里重绘 ── */}
+      <div className="section-anim" key={`mode-${modeKey}`}>
+        {mode === "countdown" ? (
+          <>
+            <div className="presets">
+              {COUNTDOWN_PRESETS.map((p) => (
+                <button key={p.label} className="preset-btn"
+                  onClick={() => { setMinutes(String(p.mins)); setSeconds("0"); }}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="time-input-row" key={`nums-${modeKey}`}>
+              <input type="number" min="0" max="999" placeholder="分" value={minutes}
+                onChange={(e) => setMinutes(e.target.value)} className="num-anim" />
+              <span>分</span>
+              <input type="number" min="0" max="59" placeholder="秒" value={seconds}
+                onChange={(e) => setSeconds(e.target.value)} className="num-anim" />
+              <span>秒</span>
+            </div>
+          </>
+        ) : (
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 6 }}>选择日期和时间</div>
             <input type="datetime-local" value={scheduledAt}
               onChange={(e) => setScheduledAt(e.target.value)}
               style={{ width: "100%", padding: "10px 12px", fontSize: 14, background: "var(--bg-input)", border: "1px solid var(--border-color)", borderRadius: 8, color: "var(--text-primary)" }} />
           </div>
-        </S>
-      )}
+        )}
+      </div>
 
-      <S idx={3}>
+      {/* 重复规则 — 静态 */}
+      <div className="section-anim">
         <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: "var(--text-secondary)" }}>重复</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
           {([{key:"none",label:"不重复"},{key:"interval",label:"间隔"},{key:"daily",label:"每天"},{key:"weekdays",label:"工作日"},{key:"weekly",label:"每周"},{key:"monthly",label:"每月"}] as {key:RepeatType;label:string}[]).map((r) => (
@@ -195,10 +192,11 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
             </button>
           ))}
         </div>
-      </S>
+      </div>
 
-      {repeatType === "interval" && (
-        <S idx={4}>
+      {/* 重复规则详情 — 动态 */}
+      <div key={`rp-${repeatType}`} className="section-anim">
+        {repeatType === "interval" && (
           <div style={{ marginBottom: 12 }}>
             <div className="presets">
               {INTERVAL_PRESETS.map((p) => (
@@ -214,11 +212,8 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
               <span>分钟</span>
             </div>
           </div>
-        </S>
-      )}
-
-      {repeatType === "weekly" && (
-        <S idx={4}>
+        )}
+        {repeatType === "weekly" && (
           <div className="time-input-row" style={{ marginBottom: 12 }}>
             <span>选择星期：</span>
             <select value={weekDay} onChange={(e) => setWeekDay(Number(e.target.value))}
@@ -226,11 +221,8 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
               {WEEK_DAYS.map((d, i) => <option key={i} value={i+1}>{d}</option>)}
             </select>
           </div>
-        </S>
-      )}
-
-      {repeatType === "monthly" && (
-        <S idx={4}>
+        )}
+        {repeatType === "monthly" && (
           <div className="time-input-row" style={{ marginBottom: 12 }}>
             <span>每月</span>
             <input type="number" min="1" max="28" value={monthDay}
@@ -238,10 +230,11 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
               style={{ width: 72, padding: 8, background: "var(--bg-input)", border: "1px solid var(--border-color)", borderRadius: 8, color: "var(--text-primary)", fontSize: 14, textAlign: "center" }} />
             <span>号</span>
           </div>
-        </S>
-      )}
+        )}
+      </div>
 
-      <S idx={5}>
+      {/* 分类 — 静态 */}
+      <div className="section-anim">
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
           {CATEGORIES.map((cat) => (
             <button key={cat} onClick={() => setCategory(cat)}
@@ -251,9 +244,10 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
             </button>
           ))}
         </div>
-      </S>
+      </div>
 
-      <S idx={6}>
+      {/* 动作 — 静态 */}
+      <div className="section-anim">
         <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: "var(--text-secondary)" }}>执行动作</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
           {(["none","shutdown","open","script"] as ActionType[]).map((t) => (
@@ -263,38 +257,39 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
             </button>
           ))}
         </div>
-      </S>
+      </div>
 
-      {(actionType === "open" || actionType === "script") && (
-        <S idx={7}>
+      {/* 动作详情 — 动态 */}
+      <div key={`act-${actionType}`} className="section-anim">
+        {(actionType === "open" || actionType === "script") && (
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <input type="text" placeholder="选择文件..." value={actionPath} readOnly
               style={{ flex: 1, padding: "8px 12px", fontSize: 12, background: "var(--bg-input)", border: "1px solid var(--border-color)", borderRadius: 8, color: "var(--text-primary)" }} />
             <button onClick={handlePickFile}
               style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid var(--accent-blue)", background: "transparent", color: "var(--accent-blue)", cursor: "pointer", fontSize: 12 }}>📁 选择</button>
           </div>
-        </S>
-      )}
-      {actionType === "shutdown" && (
-        <S idx={7}>
+        )}
+        {actionType === "shutdown" && (
           <div style={{ fontSize: 11, color: "var(--accent-orange)", marginBottom: 12 }}>⚠️ 触发 30 秒后关机，可运行 shutdown /a 取消</div>
-        </S>
-      )}
+        )}
+      </div>
 
-      <S idx={8}>
+      {/* 持续提醒 — 静态 */}
+      <div className="section-anim">
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, fontSize: 13, color: "var(--text-secondary)", cursor: "pointer" }}>
           <input type="checkbox" checked={persistent} onChange={(e) => setPersistent(e.target.checked)}
             style={{ accentColor: "var(--accent-blue)" }} />
           持续提醒（到点重复通知，直到手动确认）
         </label>
-      </S>
+      </div>
 
-      <S idx={9}>
+      {/* 创建按钮 — 静态 */}
+      <div className="section-anim">
         <button className="btn btn-primary" onClick={handleCreate} disabled={loading}
           style={{ background: "linear-gradient(135deg, var(--accent-blue), var(--accent-purple))" }}>
           {loading ? "⏳ 创建中..." : `🚀 创建${repeatType !== "none" ? "循环" : ""}任务`}
         </button>
-      </S>
+      </div>
     </div>
   );
 }
