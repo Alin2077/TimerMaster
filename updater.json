@@ -1,11 +1,11 @@
 {
-  "version": "4.8.0",
-  "notes": "TimerMaster v4.8.0",
-  "pub_date": "2026-06-09T14:30:41.151107+00:00",
+  "version": "4.9.0",
+  "notes": "TimerMaster v4.9.0",
+  "pub_date": "2026-06-09T15:04:49.010844+00:00",
   "platforms": {
     "windows-x86_64": {
       "signature": "",
-      "url": "https://github.com/Alin2077/TimerMaster/releases/download/v4.8.0/TimerMaster_4.8.0_x64-setup.exe"
+      "url": "https://github.com/Alin2077/TimerMaster/releases/download/v4.9.0/TimerMaster_4.9.0_x64-setup.exe"
     }
   }
 }
