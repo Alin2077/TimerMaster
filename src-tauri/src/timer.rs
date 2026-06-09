@@ -24,6 +24,24 @@ pub struct TimerTask {
     pub persistent: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<TaskAction>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TaskAction {
+    /// 无操作（只弹通知）
+    #[serde(rename = "none")]
+    None,
+    /// 自动关机
+    #[serde(rename = "shutdown")]
+    Shutdown,
+    /// 打开指定程序
+    #[serde(rename = "open")]
+    OpenApp { path: String },
+    /// 运行自定义脚本
+    #[serde(rename = "script")]
+    RunScript { path: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,6 +122,7 @@ impl TimerManager {
         priority: Option<u32>,
         repeat_rule: Option<RepeatRule>,
         persistent: Option<bool>,
+        action: Option<TaskAction>,
     ) -> TimerTask {
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         let task = TimerTask {
@@ -119,6 +138,7 @@ impl TimerManager {
             repeat_rule,
             persistent,
             completed_at: None,
+            action,
         };
 
         let mut tasks = self.tasks.lock().await;

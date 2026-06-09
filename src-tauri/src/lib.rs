@@ -2,9 +2,38 @@ mod timer;
 
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
-use timer::{TimerManager, TimerTask, TaskStats, TaskStatus, TaskType};
+use timer::{TimerManager, TimerTask, TaskStats, TaskStatus, TaskType, TaskAction};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
+
+/// 执行定时任务完成后的动作
+fn execute_action(action: &TaskAction, title: &str) {
+    match action {
+        TaskAction::None => {}
+        TaskAction::Shutdown => {
+            println!("[TimerMaster] 执行关机 (任务: {})", title);
+            // Windows 关机，延迟 30 秒让用户有取消机会
+            #[cfg(target_os = "windows")]
+            let _ = std::process::Command::new("shutdown")
+                .args(["/s", "/t", "30", "/c", &format!("TimerMaster 定时任务「{}」触发关机", title)])
+                .spawn();
+            #[cfg(target_os = "linux")]
+            let _ = std::process::Command::new("shutdown").args(["-h", "+1"]).spawn();
+            #[cfg(target_os = "macos")]
+            let _ = std::process::Command::new("osascript")
+                .args(["-e", &format!("tell app \"System Events\" to shut down")])
+                .spawn();
+        }
+        TaskAction::OpenApp { path } => {
+            println!("[TimerMaster] 打开应用: {} (任务: {})", path, title);
+            let _ = std::process::Command::new(path).spawn();
+        }
+        TaskAction::RunScript { path } => {
+            println!("[TimerMaster] 执行脚本: {} (任务: {})", path, title);
+            let _ = std::process::Command::new(path).spawn();
+        }
+    }
+}
 
 pub struct AppState {
     pub timer_manager: Arc<TimerManager>,
@@ -19,6 +48,7 @@ async fn create_single_timer(
     category: Option<String>,
     priority: Option<u32>,
     persistent: Option<bool>,
+    action: Option<TaskAction>,
 ) -> Result<TimerTask, String> {
     let state = state.lock().await;
     let task = state
@@ -31,6 +61,7 @@ async fn create_single_timer(
             priority,
             None,
             persistent,
+            action.clone(),
         )
         .await;
 
@@ -43,6 +74,8 @@ async fn create_single_timer(
     let task_id = task.id.clone();
     let mgr = state.timer_manager.clone();
     let is_persistent = task.persistent.unwrap_or(false);
+    let task_title = task.title.clone();
+    let task_action = action.clone();
 
     tokio::spawn(async move {
         let total_secs = duration_secs;
@@ -92,6 +125,12 @@ async fn create_single_timer(
                     .title("⏰ TimerMaster")
                     .body(format!("「{}」计时完成！", title))
                     .show();
+                // 执行动作
+                if let Some(ref act) = task_action {
+                    if !matches!(act, TaskAction::None) {
+                        execute_action(act, &task_title);
+                    }
+                }
             }
         }
         mgr.remove_cancel_flag(&task_id).await;
@@ -110,6 +149,7 @@ async fn create_repeating_timer(
     priority: Option<u32>,
     repeat_rule: Option<timer::RepeatRule>,
     persistent: Option<bool>,
+    action: Option<TaskAction>,
 ) -> Result<TimerTask, String> {
     let state = state.lock().await;
     let task = state
@@ -122,6 +162,7 @@ async fn create_repeating_timer(
             priority,
             repeat_rule,
             persistent,
+            action.clone(),
         )
         .await;
 
@@ -134,6 +175,8 @@ async fn create_repeating_timer(
     let task_id = task.id.clone();
     let mgr = state.timer_manager.clone();
     let is_persistent = task.persistent.unwrap_or(false);
+    let task_title = task.title.clone();
+    let task_action = action.clone();
 
     tokio::spawn(async move {
         loop {
@@ -163,6 +206,13 @@ async fn create_repeating_timer(
                     .title("🔔 TimerMaster")
                     .body(format!("「{}」时间到！该行动了 💪", title))
                     .show();
+
+                // 执行动作
+                if let Some(ref act) = task_action {
+                    if !matches!(act, TaskAction::None) {
+                        execute_action(act, &task_title);
+                    }
+                }
 
                 // 持久提醒：重复通知
                 if is_persistent {
@@ -257,6 +307,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(Mutex::new(AppState {
             timer_manager: Arc::new(TimerManager::new()),
         })))

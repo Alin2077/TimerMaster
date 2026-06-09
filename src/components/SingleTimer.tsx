@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 
 interface SingleTimerProps {
   onTaskCreated: () => void;
@@ -11,6 +12,15 @@ const CATEGORY_COLORS: Record<string, string> = {
   "工作": "var(--accent-orange)",
   "休息": "var(--accent-green)",
   "吃药": "var(--accent-red)",
+};
+
+type ActionType = "none" | "shutdown" | "open" | "script";
+
+const ACTION_LABELS: Record<ActionType, string> = {
+  none: "无操作",
+  shutdown: "🖥️ 自动关机",
+  open: "📂 打开软件",
+  script: "▶ 运行脚本",
 };
 
 function formatTime(secs: number): string {
@@ -26,6 +36,23 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
   const [loading, setLoading] = useState(false);
   const [category, setCategory] = useState("未分类");
   const [persistent, setPersistent] = useState(false);
+  const [actionType, setActionType] = useState<ActionType>("none");
+  const [actionPath, setActionPath] = useState("");
+
+  const handlePickFile = useCallback(async () => {
+    const filter: Record<string, string[]> = {
+      open: [".exe", ".bat", ".cmd"],
+      script: [".bat", ".ps1", ".sh", ".cmd", ".py"],
+    };
+    const selected = await open({
+      multiple: false,
+      filters: [{
+        name: "可执行文件",
+        extensions: (filter[actionType] || []).map((e) => e.replace(".", "")),
+      }],
+    });
+    if (selected) setActionPath(selected);
+  }, [actionType]);
 
   const handleStart = useCallback(async () => {
     const mins = parseInt(minutes) || 0;
@@ -37,6 +64,16 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
       return;
     }
 
+    // 构建 action 参数
+    let action: any = null;
+    if (actionType === "shutdown") {
+      action = { Shutdown: null };
+    } else if (actionType === "open" && actionPath) {
+      action = { OpenApp: { path: actionPath } };
+    } else if (actionType === "script" && actionPath) {
+      action = { RunScript: { path: actionPath } };
+    }
+
     const taskTitle = title.trim() || `倒计时 ${formatTime(totalSecs)}`;
 
     setLoading(true);
@@ -45,19 +82,21 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
         title: taskTitle,
         durationSecs: totalSecs,
         category: category === "未分类" ? null : category,
-        priority: null as number | null,
+        priority: null,
         persistent: persistent || null,
+        action,
       });
       setTitle("");
       setMinutes("");
       setSeconds("");
+      setActionPath("");
       onTaskCreated();
     } catch (e) {
       console.error("Failed to create timer:", e);
     } finally {
       setLoading(false);
     }
-  }, [title, minutes, seconds, category, persistent, onTaskCreated]);
+  }, [title, minutes, seconds, category, persistent, actionType, actionPath, onTaskCreated]);
 
   const presets = [
     { label: "5分钟", mins: 5 },
@@ -91,9 +130,7 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
             style={{
               padding: "4px 12px",
               borderRadius: 12,
-              border: `1px solid ${
-                category === cat ? CATEGORY_COLORS[cat] : "var(--border-color)"
-              }`,
+              border: `1px solid ${category === cat ? CATEGORY_COLORS[cat] : "var(--border-color)"}`,
               background: category === cat ? `${CATEGORY_COLORS[cat]}33` : "transparent",
               color: category === cat ? CATEGORY_COLORS[cat] : "var(--text-secondary)",
               fontSize: 12,
@@ -110,10 +147,7 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
           <button
             key={p.label}
             className="preset-btn"
-            onClick={() => {
-              setMinutes(String(p.mins));
-              setSeconds("0");
-            }}
+            onClick={() => { setMinutes(String(p.mins)); setSeconds("0"); }}
           >
             {p.label}
           </button>
@@ -121,52 +155,80 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
       </div>
 
       <div className="time-input-row">
-        <input
-          type="number"
-          min="0"
-          max="999"
-          placeholder="分"
-          value={minutes}
-          onChange={(e) => setMinutes(e.target.value)}
-        />
+        <input type="number" min="0" max="999" placeholder="分" value={minutes}
+          onChange={(e) => setMinutes(e.target.value)} />
         <span>分</span>
-        <input
-          type="number"
-          min="0"
-          max="59"
-          placeholder="秒"
-          value={seconds}
-          onChange={(e) => setSeconds(e.target.value)}
-        />
+        <input type="number" min="0" max="59" placeholder="秒" value={seconds}
+          onChange={(e) => setSeconds(e.target.value)} />
         <span>秒</span>
       </div>
 
-      {/* 持续提醒选项 */}
-      <label
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 12,
-          fontSize: 13,
-          color: "var(--text-secondary)",
-          cursor: "pointer",
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={persistent}
+      {/* 执行动作 */}
+      <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: "var(--text-secondary)" }}>
+        计时结束后执行
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: actionType !== "none" && !actionPath ? 8 : 12 }}>
+        {(["none", "shutdown", "open", "script"] as ActionType[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => { setActionType(t); setActionPath(""); }}
+            style={{
+              padding: "4px 12px",
+              borderRadius: 8,
+              border: "1px solid var(--border-color)",
+              background: actionType === t ? "var(--accent-blue)" : "transparent",
+              color: actionType === t ? "#fff" : "var(--text-secondary)",
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+          >
+            {ACTION_LABELS[t]}
+          </button>
+        ))}
+      </div>
+
+      {/* 文件选择（打开软件 / 运行脚本） */}
+      {(actionType === "open" || actionType === "script") && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <input
+            type="text"
+            placeholder={actionType === "open" ? "选择要打开的 .exe 文件..." : "选择要执行的脚本..."}
+            value={actionPath}
+            readOnly
+            style={{
+              flex: 1, padding: "8px 12px", fontSize: 12,
+              background: "var(--bg-input)", border: "1px solid var(--border-color)",
+              borderRadius: 8, color: "var(--text-primary)",
+            }}
+          />
+          <button onClick={handlePickFile} style={{
+            padding: "8px 16px", borderRadius: 8,
+            border: "1px solid var(--accent-blue)",
+            background: "transparent", color: "var(--accent-blue)",
+            cursor: "pointer", fontSize: 12, whiteSpace: "nowrap",
+          }}>
+            📁 选择文件
+          </button>
+        </div>
+      )}
+      {actionType === "shutdown" && (
+        <div style={{ fontSize: 11, color: "var(--accent-orange)", marginBottom: 12 }}>
+          ⚠️ 倒计时结束后 30 秒自动关机，可在桌面运行 shutdown /a 取消
+        </div>
+      )}
+
+      {/* 持续提醒 */}
+      <label style={{
+        display: "flex", alignItems: "center", gap: 8, marginBottom: 12,
+        fontSize: 13, color: "var(--text-secondary)", cursor: "pointer",
+      }}>
+        <input type="checkbox" checked={persistent}
           onChange={(e) => setPersistent(e.target.checked)}
-          style={{ accentColor: "var(--accent-blue)" }}
-        />
+          style={{ accentColor: "var(--accent-blue)" }} />
         持续提醒（到点后重复通知，直到手动确认）
       </label>
 
-      <button
-        className="btn btn-primary"
-        onClick={handleStart}
-        disabled={loading}
-      >
+      <button className="btn btn-primary" onClick={handleStart} disabled={loading}>
         {loading ? "⏳ 创建中..." : "🚀 开始计时"}
       </button>
     </div>
