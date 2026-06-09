@@ -120,7 +120,12 @@ def detect_bump_type() -> str:
             cwd=PROJECT_DIR, capture_output=True, text=True,
         )
 
-    log = result.stdout.lower()
+    log_lines = result.stdout.split("\n")
+    # 跳过自动版本号提交
+    filtered_lines = [
+        l for l in log_lines if not re.match(r'^[a-f0-9]+\s+chore: bump to v\d', l, re.I)
+    ]
+    log = "\n".join(filtered_lines).lower()
 
     # 检查是否包含重大变更关键词
     major_keywords = ["breaking change", "大版本", "不兼容", "breaking"]
@@ -166,8 +171,12 @@ def get_commit_log_since_last_tag():
     for line in lines[:50]:
         match = re.match(r'^([a-f0-9]+)\s+(.*)', line)
         if match:
-            notes.append(f"- {match.group(2)}")
-    return "\n".join(notes)
+            msg = match.group(2)
+            # 跳过自动生成的版本号提交
+            if re.match(r'^chore: bump to v\d', msg):
+                continue
+            notes.append(f"- {msg}")
+    return "\n".join(notes) if notes else "无新增变更"
 
 
 def main():
