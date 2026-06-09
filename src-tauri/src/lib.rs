@@ -103,9 +103,10 @@ async fn create_single_timer(
     let is_persistent = task.persistent.unwrap_or(false);
     let task_title = task.title.clone();
     let task_action = action.clone();
+    let total_secs = actual_secs;
 
     tokio::spawn(async move {
-        let total_secs = duration_secs;
+        // total_secs 已设为实际秒数（倒计时或指定时间）
         for elapsed in 0..=total_secs {
             if cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
                 break;

@@ -75,7 +75,8 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
         if (durationSecs <= 0) { toast("请设置有效时间", "error"); setLoading(false); return; }
       } else {
         scheduled = scheduledAt.replace("T", " ");
-        durationSecs = 1;
+        // 单次用 1（后端计算实际秒数），重复用间隔分钟数
+        durationSecs = repeatType !== "none" ? (parseInt(intervalMin) || 45) * 60 : 1;
       }
 
       if (repeatType !== "none") {
