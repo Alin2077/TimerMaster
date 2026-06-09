@@ -139,12 +139,28 @@ def detect_bump_type() -> str:
 
 
 def get_commit_log_since_last_tag():
-    """获取自上一个标签以来的 commit 日志作为更新日志."""
-    result = subprocess.run(
-        ["git", "log", "--oneline", "--no-decorate"],
-        cwd=PROJECT_DIR, capture_output=True, text=True
+    """只获取自上一个标签以来的 commit 作为更新日志."""
+    # 获取最后一个标签
+    last_tag_result = subprocess.run(
+        ["git", "describe", "--tags", "--abbrev=0"],
+        cwd=PROJECT_DIR, capture_output=True, text=True,
     )
+    if last_tag_result.returncode == 0:
+        last_tag = last_tag_result.stdout.strip()
+        result = subprocess.run(
+            ["git", "log", f"{last_tag}..HEAD", "--oneline", "--no-decorate"],
+            cwd=PROJECT_DIR, capture_output=True, text=True,
+        )
+    else:
+        # 没有标签，取最近 30 条
+        result = subprocess.run(
+            ["git", "log", "--oneline", "--no-decorate", "-30"],
+            cwd=PROJECT_DIR, capture_output=True, text=True,
+        )
+
     lines = result.stdout.strip().split("\n")
+    if not lines or lines[0] == "":
+        return "无新增变更"
 
     notes = []
     for line in lines[:50]:
