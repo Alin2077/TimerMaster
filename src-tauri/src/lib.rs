@@ -1,3 +1,4 @@
+mod database;
 mod timer;
 
 use std::sync::Arc;

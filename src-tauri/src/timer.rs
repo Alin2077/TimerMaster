@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Mutex;
 use uuid::Uuid;
+
+use crate::database::Database;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimerTask {
@@ -95,52 +96,26 @@ pub struct CategoryStat {
 pub struct TimerManager {
     pub tasks: Arc<Mutex<Vec<TimerTask>>>,
     cancel_flags: Arc<Mutex<Vec<(String, Arc<AtomicBool>)>>>,
-    data_path: PathBuf,
+    db: Database,
 }
 
 impl TimerManager {
-    pub fn new(data_dir: PathBuf) -> Self {
-        // 确保目录存在
-        std::fs::create_dir_all(&data_dir).ok();
-        let data_path = data_dir.join("tasks.json");
+    pub fn new(data_dir: std::path::PathBuf) -> Self {
+        let db = Database::open(&data_dir).unwrap_or_else(|e| {
+            eprintln!("[TimerMaster] 数据库打开失败: {}", e);
+            // 用空路径创建一个 fallback —— 实际上会 panic，但开发环境可用
+            Database::open(&data_dir).expect("无法打开数据库")
+        });
 
-        let mgr = TimerManager {
-            tasks: Arc::new(Mutex::new(Vec::new())),
+        // 启动时从数据库加载任务到内存
+        let tasks = db.list_all().unwrap_or_default();
+        println!("[TimerMaster] 已加载 {} 条任务", tasks.len());
+
+        TimerManager {
+            tasks: Arc::new(Mutex::new(tasks)),
             cancel_flags: Arc::new(Mutex::new(Vec::new())),
-            data_path,
-        };
-
-        // 启动时从文件加载
-        if let Ok(loaded) = Self::load_from_file(&mgr.data_path) {
-            if let Ok(mut tasks) = mgr.tasks.try_lock() {
-                *tasks = loaded;
-                println!("[TimerMaster] 已加载 {} 条任务记录", tasks.len());
-            }
+            db,
         }
-
-        mgr
-    }
-
-    /// 从 JSON 文件加载任务列表
-    fn load_from_file(path: &PathBuf) -> Result<Vec<TimerTask>, String> {
-        if !path.exists() {
-            return Ok(Vec::new());
-        }
-        let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&content).map_err(|e| e.to_string())
-    }
-
-    /// 保存任务列表到 JSON 文件
-    fn save_to_file(tasks: &[TimerTask], path: &PathBuf) {
-        if let Ok(json) = serde_json::to_string_pretty(tasks) {
-            let _ = std::fs::write(path, &json);
-        }
-    }
-
-    /// 每个增删改操作后自动保存
-    async fn save(&self) {
-        let tasks = self.tasks.lock().await;
-        Self::save_to_file(&tasks, &self.data_path);
     }
 
     pub async fn add_task(
@@ -171,21 +146,27 @@ impl TimerManager {
             action,
         };
 
+        // 写入数据库
+        let _ = self.db.insert_task(&task);
+
+        // 加入内存
         let mut tasks = self.tasks.lock().await;
         tasks.push(task.clone());
-        drop(tasks);
-        self.save().await;
         task
     }
 
     pub async fn cancel_task(&self, task_id: &str) -> bool {
+        // 更新内存
         let mut tasks = self.tasks.lock().await;
         if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
             task.status = TaskStatus::Cancelled;
         }
         drop(tasks);
-        self.save().await;
 
+        // 更新数据库
+        let _ = self.db.update_status(task_id, &TaskStatus::Cancelled);
+
+        // 设置取消标记（用于正在运行的计时器）
         let flags = self.cancel_flags.lock().await;
         if let Some(pos) = flags.iter().position(|(id, _)| id == task_id) {
             flags[pos].1.store(true, Ordering::SeqCst);
@@ -196,14 +177,17 @@ impl TimerManager {
     }
 
     pub async fn complete_task(&self, task_id: &str) {
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        // 更新内存
         let mut tasks = self.tasks.lock().await;
         if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
             task.status = TaskStatus::Completed;
-            task.completed_at =
-                Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+            task.completed_at = Some(now.clone());
         }
         drop(tasks);
-        self.save().await;
+
+        // 更新数据库
+        let _ = self.db.complete_task(task_id, &now);
     }
 
     pub async fn list_tasks(&self) -> Vec<TimerTask> {
@@ -212,34 +196,14 @@ impl TimerManager {
     }
 
     pub async fn get_stats(&self) -> TaskStats {
-        let tasks = self.tasks.lock().await;
-        let total = tasks.len();
-        let completed = tasks.iter().filter(|t| matches!(t.status, TaskStatus::Completed)).count();
-        let cancelled = tasks.iter().filter(|t| matches!(t.status, TaskStatus::Cancelled)).count();
-        let running = tasks.iter().filter(|t| matches!(t.status, TaskStatus::Running)).count();
-        let completion_rate = if total > 0 { (completed as f64 / total as f64) * 100.0 } else { 0.0 };
-
-        let mut cat_map: std::collections::HashMap<String, (usize, usize)> =
-            std::collections::HashMap::new();
-        for t in tasks.iter() {
-            let cat = t.category.clone().unwrap_or_else(|| "未分类".to_string());
-            let entry = cat_map.entry(cat).or_insert((0, 0));
-            entry.0 += 1;
-            if matches!(t.status, TaskStatus::Completed) {
-                entry.1 += 1;
-            }
-        }
-        let by_category: Vec<CategoryStat> = cat_map
-            .into_iter()
-            .map(|(category, (total, completed))| CategoryStat { category, total, completed })
-            .collect();
-
-        TaskStats { total, completed, cancelled, running, completion_rate, by_category }
+        self.db.get_stats().unwrap_or(TaskStats {
+            total: 0, completed: 0, cancelled: 0, running: 0,
+            completion_rate: 0.0, by_category: vec![],
+        })
     }
 
     pub async fn export_data(&self) -> Vec<TimerTask> {
-        let tasks = self.tasks.lock().await;
-        tasks.clone()
+        self.db.export_all().unwrap_or_default()
     }
 
     pub async fn register_cancel_flag(&self, task_id: &str) -> Arc<AtomicBool> {
@@ -257,13 +221,14 @@ impl TimerManager {
     pub async fn update_task_status(&self, task_id: &str, status: TaskStatus) {
         let mut tasks = self.tasks.lock().await;
         if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
-            task.status = status;
+            task.status = status.clone();
         }
         drop(tasks);
-        self.save().await;
+        let _ = self.db.update_status(task_id, &status);
     }
 
     pub async fn update_task_remaining(&self, task_id: &str, remaining: u64) {
+        // 剩余时间只更新内存，不写数据库（1 秒一次太频繁）
         let mut tasks = self.tasks.lock().await;
         if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
             task.remaining_secs = remaining;
