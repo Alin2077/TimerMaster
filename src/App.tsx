@@ -25,6 +25,7 @@ function AppContent() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [version, setVersion] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+const [checkingManual, setCheckingManual] = useState(false);
 
   // 更新相关
   const updateObjRef = useRef<any>(null);
@@ -100,20 +101,23 @@ function AppContent() {
   const handleManualCheck = useCallback(async () => {
     if (checkingRef.current) return;
     checkingRef.current = true;
+    setCheckingManual(true);
     try {
       const upd = await check();
       if (upd) {
         updateObjRef.current = upd;
         setUpdateState({ version: upd.version, status: "pending" });
+        toast(`发现新版本 v${upd.version}`, "info");
       } else {
-        setUpdateState(null);
+        toast("✓ 已是最新版本", "success");
       }
     } catch {
-      // 网络失败，静默
+      toast("检查失败，请检查网络", "error");
     } finally {
       checkingRef.current = false;
+      setCheckingManual(false);
     }
-  }, []);
+  }, [toast]);
 
   const handleThemeChange = useCallback((t: "dark" | "light") => {
     setTheme(t); document.body.className = t === "light" ? "light" : "";
@@ -178,9 +182,9 @@ function AppContent() {
               {updateBadge.text}
             </button>
           ) : (
-            <button onClick={handleManualCheck}
-              style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border-color)", borderRadius: 6, color: "var(--text-secondary)", fontSize: 11, cursor: "pointer" }}>
-              🔄 检查
+            <button onClick={handleManualCheck} disabled={checkingManual}
+              style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border-color)", borderRadius: 6, color: "var(--text-secondary)", fontSize: 11, cursor: checkingManual ? "not-allowed" : "pointer", opacity: checkingManual ? 0.6 : 1 }}>
+              {checkingManual ? "🔍 检查中" : "🔄 检查"}
             </button>
           )}
         </div>
