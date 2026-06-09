@@ -14,6 +14,7 @@ interface TimerTask {
   category?: string;
   priority?: number;
   persistent?: boolean;
+  scheduled_at?: string;
 }
 
 interface TickEvent {
@@ -36,6 +37,7 @@ export default function RunningTimers() {
   const toast = useToast();
   const [tasks, setTasks] = useState<TimerTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [numKey, setNumKey] = useState(0);
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -60,6 +62,7 @@ export default function RunningTimers() {
       setTasks((prev) =>
         prev.map((t) => (t.id === id ? { ...t, remaining_secs: remaining } : t))
       );
+      setNumKey((k) => k + 1);
     });
     return () => {
       unlisten.then((fn) => fn());
@@ -128,84 +131,103 @@ export default function RunningTimers() {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {runningTasks.map((task) => (
+        {runningTasks.map((task, idx) => {
+          const progress = task.duration_secs > 0
+            ? Math.round((task.remaining_secs / task.duration_secs) * 100)
+            : 0;
+          const catColor = task.category === "工作" ? "var(--accent-orange)"
+            : task.category === "休息" ? "var(--accent-green)"
+            : task.category === "吃药" ? "var(--accent-red)"
+            : "var(--accent-blue)";
+          const barColor = progress > 50 ? "var(--accent-green)"
+            : progress > 25 ? "var(--accent-orange)"
+            : "#e74c3c";
+          return (
           <div
             key={task.id}
-            className={task.remaining_secs <= 0 ? "task-complete-glow" : ""}
+            className={`running-card ${task.remaining_secs <= 0 ? "task-complete-glow" : ""}`}
             style={{
               background: "var(--bg-input)",
               borderRadius: 16,
-              padding: "20px 16px",
+              padding: 0,
               border: "1px solid var(--border-color)",
-              textAlign: "center",
+              overflow: "hidden",
+              display: "flex",
               transition: "border-color 0.3s",
             }}
           >
-            <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>
-              {getTypeIcon(task.type)} {task.title}
-              {task.category && task.category !== "未分类" && (
-                <span
+            {/* 分类色条 */}
+            <div style={{ width: 5, background: catColor, flexShrink: 0 }} />
+
+            <div style={{ flex: 1, padding: "16px 16px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>
+                {getTypeIcon(task.type)} {task.title}
+                {task.category && task.category !== "未分类" && (
+                  <span style={{ marginLeft: 6, fontSize: 11, padding: "1px 6px", borderRadius: 8, background: `${catColor}33`, color: catColor }}>
+                    {task.category}
+                  </span>
+                )}
+                {task.type === "repeating" && (
+                  <span style={{ marginLeft: 6, fontSize: 11, color: "var(--accent-green)" }}>
+                    每{Math.floor(task.duration_secs / 60)}分钟
+                  </span>
+                )}
+                {task.scheduled_at && (
+                  <span style={{ marginLeft: 6, fontSize: 11, color: "var(--accent-blue)" }}>
+                    ⏰ {task.scheduled_at.slice(11, 16)}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ position: "relative" }}>
+                <div
+                  className={`${task.remaining_secs > 0 && task.remaining_secs <= 10 ? "timer-pulse" : ""}`}
+                  key={`n-${numKey}-${task.id}`}
                   style={{
-                    marginLeft: 6,
-                    fontSize: 11,
-                    padding: "1px 6px",
-                    borderRadius: 8,
-                    background: "var(--accent-blue-transparent)",
-                    color: "var(--accent-blue)",
+                    fontSize: 48,
+                    fontWeight: 700,
+                    fontVariantNumeric: "tabular-nums",
+                    color: task.remaining_secs <= 10 && task.remaining_secs > 0
+                      ? "#e74c3c"
+                      : task.type === "repeating" ? "var(--accent-green)" : "var(--accent-blue)",
+                    margin: "8px 0 2px",
+                    letterSpacing: 2,
+                    transition: "color 0.5s",
                   }}
                 >
-                  {task.category}
-                </span>
-              )}
-              {task.type === "repeating" && (
-                <span style={{ marginLeft: 6, fontSize: 11, color: "var(--accent-green)" }}>
-                  每{Math.floor(task.duration_secs / 60)}分钟
-                </span>
-              )}
-            </div>
+                  <span className="num-pop" key={`np-${numKey}-${task.id}`}>
+                    {formatTime(task.remaining_secs)}
+                  </span>
+                </div>
 
-            <div
-              className={task.remaining_secs > 0 && task.remaining_secs <= 10 ? "timer-pulse" : ""}
-              style={{
-                fontSize: 48,
-                fontWeight: 700,
-                fontVariantNumeric: "tabular-nums",
-                color: task.remaining_secs <= 10 && task.remaining_secs > 0
-                  ? "#e74c3c"
-                  : task.type === "repeating" ? "var(--accent-green)" : "var(--accent-blue)",
-                margin: "8px 0",
-                letterSpacing: 2,
-                transition: "color 0.5s",
-              }}
-            >
-              {formatTime(task.remaining_secs)}
-            </div>
+                {/* 进度百分比 */}
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 8 }}>
+                  {progress}% · {task.type === "repeating" ? "距下次提醒" : "剩余"}
+                </div>
+              </div>
 
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 12 }}>
-              {task.type === "repeating" ? "距离下次提醒" : "剩余时间"}
-            </div>
+              {/* 进度条 */}
+              <div style={{ height: 4, background: "var(--border-color)", borderRadius: 2, marginBottom: 12, overflow: "hidden" }}>
+                <div className="progress-bar" style={{ width: `${progress}%`, background: barColor }} />
+              </div>
 
-            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-              {task.remaining_secs <= 0 || (task.duration_secs - task.remaining_secs) >= task.duration_secs ? (
-                <button
-                  className="btn btn-success"
-                  onClick={() => handleComplete(task.id)}
-                  style={{ fontSize: 12, padding: "6px 20px" }}
-                >
-                  ✅ 确认完成
-                </button>
-              ) : (
-                <button
-                  className="btn btn-danger"
-                  onClick={() => handleCancel(task.id)}
-                  style={{ fontSize: 12, padding: "6px 20px" }}
-                >
-                  ⏹ 取消
-                </button>
-              )}
+              <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                {task.remaining_secs <= 0 || (task.duration_secs - task.remaining_secs) >= task.duration_secs ? (
+                  <button className="btn btn-success" onClick={() => handleComplete(task.id)}
+                    style={{ fontSize: 12, padding: "6px 20px" }}>
+                    ✅ 确认完成
+                  </button>
+                ) : (
+                  <button className="btn btn-danger" onClick={() => handleCancel(task.id)}
+                    style={{ fontSize: 12, padding: "6px 20px" }}>
+                    ⏹ 取消
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

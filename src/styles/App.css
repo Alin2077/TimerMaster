@@ -532,3 +532,37 @@ input:focus, select:focus {
 .section-anim:nth-child(5) { animation-delay: 0.24s; }
 .section-anim:nth-child(6) { animation-delay: 0.30s; }
 .section-anim:nth-child(7) { animation-delay: 0.36s; }
+
+
+/* ── 进度条颜色 ── */
+@keyframes progressGlow {
+  from { opacity: 0.6; }
+  to   { opacity: 1; }
+}
+.progress-bar {
+  height: 4px;
+  border-radius: 2px;
+  transition: width 0.5s ease, background 0.5s ease;
+  animation: progressGlow 1s ease-in-out infinite alternate;
+}
+
+/* ── 数字平滑过渡 ── */
+@keyframes numPop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+.num-pop {
+  display: inline-block;
+  animation: numPop 0.3s ease-out;
+}
+
+/* ── 计时卡片依次入场 ── */
+.running-card {
+  animation: slideIn 0.3s ease-out both;
+}
+.running-card:nth-child(1) { animation-delay: 0.00s; }
+.running-card:nth-child(2) { animation-delay: 0.08s; }
+.running-card:nth-child(3) { animation-delay: 0.16s; }
+.running-card:nth-child(4) { animation-delay: 0.24s; }
+.running-card:nth-child(5) { animation-delay: 0.32s; }
