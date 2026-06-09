@@ -103,21 +103,37 @@ def detect_bump_type() -> str:
     - minor: 存在 feat 类型 commit（且无 BREAKING CHANGE）
     - patch: 其他所有（fix, docs, chore, refactor, test 等）
     """
-    last_tag_result = subprocess.run(
-        ["git", "describe", "--tags", "--abbrev=0"],
+    # 优先用 git describe 找最近标签，失败则从 tag 列表取最新的 v* 标签
+    last_tag = None
+    tag_result = subprocess.run(
+        ["git", "describe", "--tags", "--match", "v*", "--abbrev=0"],
         cwd=PROJECT_DIR, capture_output=True, text=True,
     )
-    if last_tag_result.returncode == 0:
-        last_tag = last_tag_result.stdout.strip()
+    if tag_result.returncode == 0:
+        last_tag = tag_result.stdout.strip()
+
+    if not last_tag:
+        # 回退：取所有 v* 标签中最新一个
+        list_result = subprocess.run(
+            ["git", "tag", "--list", "v*", "--sort=-v:refname"],
+            cwd=PROJECT_DIR, capture_output=True, text=True,
+        )
+        tags = [t.strip() for t in list_result.stdout.strip().split("\n") if t.strip()]
+        if tags:
+            last_tag = tags[0]
+
+    if last_tag:
         result = subprocess.run(
             ["git", "log", f"{last_tag}..HEAD", "--oneline", "--no-decorate"],
             cwd=PROJECT_DIR, capture_output=True, text=True,
         )
+        print(f"  📋 基于标签 {last_tag} 检测")
     else:
         result = subprocess.run(
             ["git", "log", "--oneline", "--no-decorate", "-30"],
             cwd=PROJECT_DIR, capture_output=True, text=True,
         )
+        print(f"  📋 无标签，取最近 30 条 commit")
 
     commits = result.stdout.strip().split("\n")
     # 跳过自动版本号提交
@@ -148,18 +164,29 @@ def detect_bump_type() -> str:
 def get_commit_log_since_last_tag():
     """只获取自上一个标签以来的 commit 作为更新日志."""
     # 获取最后一个标签
-    last_tag_result = subprocess.run(
-        ["git", "describe", "--tags", "--abbrev=0"],
+    last_tag = None
+    tag_result = subprocess.run(
+        ["git", "describe", "--tags", "--match", "v*", "--abbrev=0"],
         cwd=PROJECT_DIR, capture_output=True, text=True,
     )
-    if last_tag_result.returncode == 0:
-        last_tag = last_tag_result.stdout.strip()
+    if tag_result.returncode == 0:
+        last_tag = tag_result.stdout.strip()
+
+    if not last_tag:
+        list_result = subprocess.run(
+            ["git", "tag", "--list", "v*", "--sort=-v:refname"],
+            cwd=PROJECT_DIR, capture_output=True, text=True,
+        )
+        tags = [t.strip() for t in list_result.stdout.strip().split("\n") if t.strip()]
+        if tags:
+            last_tag = tags[0]
+
+    if last_tag:
         result = subprocess.run(
             ["git", "log", f"{last_tag}..HEAD", "--oneline", "--no-decorate"],
             cwd=PROJECT_DIR, capture_output=True, text=True,
         )
     else:
-        # 没有标签，取最近 30 条
         result = subprocess.run(
             ["git", "log", "--oneline", "--no-decorate", "-30"],
             cwd=PROJECT_DIR, capture_output=True, text=True,
