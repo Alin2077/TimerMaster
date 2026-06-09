@@ -1,17 +1,17 @@
 """
 TimerMaster 一键构建 + 发布脚本
 用法:
-  python scripts/build-and-release.py                  # patch（最常用）
-  python scripts/build-and-release.py <Token>          # patch + 传 Token
-  python scripts/build-and-release.py patch <Token>    # 明确 patch
-  python scripts/build-and-release.py minor <Token>    # 次版本 +1
-  python scripts/build-and-release.py major <Token>    # 主版本 +1
-  python scripts/build-and-release.py v2.0.1 <Token>   # 指定任意版本
+  python scripts/build-and-release.py                    # 自动判断 + 环境变量 Token
+  python scripts/build-and-release.py <Token>            # 自动判断 + 传 Token
+  python scripts/build-and-release.py patch <Token>      # 强制 patch
+  python scripts/build-and-release.py minor <Token>      # 强制 minor
+  python scripts/build-and-release.py major <Token>      # 强制 major
+  python scripts/build-and-release.py v2.0.1 <Token>     # 指定版本
 
-版本规则:
-  不指定 → 默认 patch  (4.3.0 → 4.3.1)  ← 修 Bug / 小改动
-  指定 minor → 次版本 +1 (4.3.0 → 4.4.0)  ← 加新功能
-  指定 major → 主版本 +1 (4.3.0 → 5.0.0)  ← 重大改动
+自动检测规则（Conventional Commits）:
+  含 `feat:` → minor  (4.4.1 → 4.5.0)  ← 加功能
+  含 BREAKING → major  (4.5.0 → 5.0.0)  ← 重大变更
+  其他       → patch  (4.5.0 → 4.5.1)  ← 修 Bug、文档等
 """
 import os
 import sys
@@ -98,50 +98,50 @@ def update_version_in_files(new_version: str):
 
 def detect_bump_type() -> str:
     """
-    只分析自上一个标签以来的 commit，自动判断版本递增类型：
-    - major: 包含 "BREAKING CHANGE" 或 "大版本" 或 "不兼容"
-    - minor: 包含 "feat:" 或 "新增" 或 "新功能"
-    - patch: 其他（修 Bug、chore、文档等）
+    分析自上一个标签以来的 commit，按 Conventional Commits 规范决定版本递增：
+    - major: 任意 commit 包含 BREAKING CHANGE 标记
+    - minor: 存在 feat 类型 commit（且无 BREAKING CHANGE）
+    - patch: 其他所有（fix, docs, chore, refactor, test 等）
     """
-    # 获取最后一个标签
     last_tag_result = subprocess.run(
         ["git", "describe", "--tags", "--abbrev=0"],
         cwd=PROJECT_DIR, capture_output=True, text=True,
     )
     if last_tag_result.returncode == 0:
         last_tag = last_tag_result.stdout.strip()
-        # 只获取自上一个标签以来的 commit
         result = subprocess.run(
             ["git", "log", f"{last_tag}..HEAD", "--oneline", "--no-decorate"],
             cwd=PROJECT_DIR, capture_output=True, text=True,
         )
     else:
-        # 没有标签，取最近 30 条
         result = subprocess.run(
             ["git", "log", "--oneline", "--no-decorate", "-30"],
             cwd=PROJECT_DIR, capture_output=True, text=True,
         )
 
-    log_lines = result.stdout.split("\n")
+    commits = result.stdout.strip().split("\n")
     # 跳过自动版本号提交
-    filtered_lines = [
-        l for l in log_lines if not re.match(r'^[a-f0-9]+\s+chore: bump to v\d', l, re.I)
-    ]
-    log = "\n".join(filtered_lines).lower()
+    commits = [c for c in commits if not re.match(r'^[a-f0-9]+\s+chore: bump to v\d', c, re.I)]
+    commits = [c for c in commits if c.strip()]
 
-    # 检查是否包含重大变更关键词
-    major_keywords = ["breaking change", "大版本", "不兼容", "breaking"]
-    for kw in major_keywords:
-        if kw in log:
-            return "major"
+    has_breaking = False
+    has_feat = False
 
-    # 检查是否包含新功能关键词
-    minor_keywords = ["feat:", "新增", "新功能", "新页面", "新组件"]
-    for kw in minor_keywords:
-        if kw in log:
-            return "minor"
+    for commit in commits:
+        msg = re.sub(r'^[a-f0-9]+\s+', '', commit).strip()
 
-    # 默认 patch
+        # BREAKING CHANGE（不区分大小写）
+        if "BREAKING CHANGE" in msg or "breaking change" in msg.lower():
+            has_breaking = True
+
+        # feat: 或 feat(scope): 开头
+        if re.match(r'^feat(\(|:)', msg.lower()):
+            has_feat = True
+
+    if has_breaking:
+        return "major"
+    if has_feat:
+        return "minor"
     return "patch"
 
 
@@ -213,16 +213,10 @@ def main():
         print("   用法: set GH_TOKEN=ghp_xxx && python scripts/build-and-release.py")
         sys.exit(1)
 
-    # ── 默认 patch ──
+    # ── 自动检测版本递增类型 ──
     if bump_type_or_version == "auto":
-        # 看看是否在 commit 里有 BREAKING CHANGE，有的话升 minor
-        detected = detect_bump_type()
-        if detected == "major":
-            bump_type_or_version = "minor"  # 保守一点，最多升 minor
-            print(f"  🔍 检测到重大变更，升 minor")
-        else:
-            bump_type_or_version = "patch"
-            print(f"  🔍 默认 patch（未指定版本号）")
+        bump_type_or_version = detect_bump_type()
+        print(f"  🔍 检测到: {bump_type_or_version}")
 
     # ── 1. 计算版本号 ──
     if bump_type_or_version.startswith("v"):
