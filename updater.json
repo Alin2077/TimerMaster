@@ -1,11 +1,11 @@
 {
-  "version": "2.0.0",
-  "notes": "TimerMaster 2.0.0",
-  "pub_date": "2026-06-08T16:48:01.011473+00:00",
+  "version": "3.0.0",
+  "notes": "TimerMaster v3.0.0",
+  "pub_date": "2026-06-09T01:55:23.730004+00:00",
   "platforms": {
     "windows-x86_64": {
       "signature": "",
-      "url": "https://github.com/Alin2077/TimerMaster/releases/download/v2.0.0/TimerMaster_2.0.0_x64-setup.exe"
+      "url": "https://github.com/Alin2077/TimerMaster/releases/download/v3.0.0/TimerMaster_3.0.0_x64-setup.exe"
     }
   }
 }
