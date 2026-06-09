@@ -308,10 +308,12 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        .manage(Arc::new(Mutex::new(AppState {
-            timer_manager: Arc::new(TimerManager::new()),
-        })))
         .setup(|app| {
+            // 初始化数据管理（需在 setup 中获取 app 路径）
+            let data_dir = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("data"));
+            app.manage(Arc::new(Mutex::new(AppState {
+                timer_manager: Arc::new(TimerManager::new(data_dir)),
+            })));
             use tauri::menu::{Menu, MenuItem};
             use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 

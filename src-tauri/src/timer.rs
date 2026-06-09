@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Mutex;
@@ -30,16 +31,12 @@ pub struct TimerTask {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TaskAction {
-    /// 无操作（只弹通知）
     #[serde(rename = "none")]
     None,
-    /// 自动关机
     #[serde(rename = "shutdown")]
     Shutdown,
-    /// 打开指定程序
     #[serde(rename = "open")]
     OpenApp { path: String },
-    /// 运行自定义脚本
     #[serde(rename = "script")]
     RunScript { path: String },
 }
@@ -66,19 +63,14 @@ pub enum TaskStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RepeatRule {
-    /// 每 N 分钟（原固定间隔）
     #[serde(rename = "interval")]
     Interval { interval_minutes: u64 },
-    /// 每天固定时间
     #[serde(rename = "daily")]
     Daily,
-    /// 工作日（周一至周五）
     #[serde(rename = "weekdays")]
     Weekdays,
-    /// 每周 N
     #[serde(rename = "weekly")]
     Weekly { day_of_week: u32 },
-    /// 每月 N 号
     #[serde(rename = "monthly")]
     Monthly { day_of_month: u32 },
 }
@@ -103,14 +95,52 @@ pub struct CategoryStat {
 pub struct TimerManager {
     pub tasks: Arc<Mutex<Vec<TimerTask>>>,
     cancel_flags: Arc<Mutex<Vec<(String, Arc<AtomicBool>)>>>,
+    data_path: PathBuf,
 }
 
 impl TimerManager {
-    pub fn new() -> Self {
-        TimerManager {
+    pub fn new(data_dir: PathBuf) -> Self {
+        // 确保目录存在
+        std::fs::create_dir_all(&data_dir).ok();
+        let data_path = data_dir.join("tasks.json");
+
+        let mgr = TimerManager {
             tasks: Arc::new(Mutex::new(Vec::new())),
             cancel_flags: Arc::new(Mutex::new(Vec::new())),
+            data_path,
+        };
+
+        // 启动时从文件加载
+        if let Ok(loaded) = Self::load_from_file(&mgr.data_path) {
+            if let Ok(mut tasks) = mgr.tasks.try_lock() {
+                *tasks = loaded;
+                println!("[TimerMaster] 已加载 {} 条任务记录", tasks.len());
+            }
         }
+
+        mgr
+    }
+
+    /// 从 JSON 文件加载任务列表
+    fn load_from_file(path: &PathBuf) -> Result<Vec<TimerTask>, String> {
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+        let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&content).map_err(|e| e.to_string())
+    }
+
+    /// 保存任务列表到 JSON 文件
+    fn save_to_file(tasks: &[TimerTask], path: &PathBuf) {
+        if let Ok(json) = serde_json::to_string_pretty(tasks) {
+            let _ = std::fs::write(path, &json);
+        }
+    }
+
+    /// 每个增删改操作后自动保存
+    async fn save(&self) {
+        let tasks = self.tasks.lock().await;
+        Self::save_to_file(&tasks, &self.data_path);
     }
 
     pub async fn add_task(
@@ -143,6 +173,8 @@ impl TimerManager {
 
         let mut tasks = self.tasks.lock().await;
         tasks.push(task.clone());
+        drop(tasks);
+        self.save().await;
         task
     }
 
@@ -151,6 +183,9 @@ impl TimerManager {
         if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
             task.status = TaskStatus::Cancelled;
         }
+        drop(tasks);
+        self.save().await;
+
         let flags = self.cancel_flags.lock().await;
         if let Some(pos) = flags.iter().position(|(id, _)| id == task_id) {
             flags[pos].1.store(true, Ordering::SeqCst);
@@ -167,6 +202,8 @@ impl TimerManager {
             task.completed_at =
                 Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
         }
+        drop(tasks);
+        self.save().await;
     }
 
     pub async fn list_tasks(&self) -> Vec<TimerTask> {
@@ -180,13 +217,8 @@ impl TimerManager {
         let completed = tasks.iter().filter(|t| matches!(t.status, TaskStatus::Completed)).count();
         let cancelled = tasks.iter().filter(|t| matches!(t.status, TaskStatus::Cancelled)).count();
         let running = tasks.iter().filter(|t| matches!(t.status, TaskStatus::Running)).count();
-        let completion_rate = if total > 0 {
-            (completed as f64 / total as f64) * 100.0
-        } else {
-            0.0
-        };
+        let completion_rate = if total > 0 { (completed as f64 / total as f64) * 100.0 } else { 0.0 };
 
-        // 按分类统计
         let mut cat_map: std::collections::HashMap<String, (usize, usize)> =
             std::collections::HashMap::new();
         for t in tasks.iter() {
@@ -199,21 +231,10 @@ impl TimerManager {
         }
         let by_category: Vec<CategoryStat> = cat_map
             .into_iter()
-            .map(|(category, (total, completed))| CategoryStat {
-                category,
-                total,
-                completed,
-            })
+            .map(|(category, (total, completed))| CategoryStat { category, total, completed })
             .collect();
 
-        TaskStats {
-            total,
-            completed,
-            cancelled,
-            running,
-            completion_rate,
-            by_category,
-        }
+        TaskStats { total, completed, cancelled, running, completion_rate, by_category }
     }
 
     pub async fn export_data(&self) -> Vec<TimerTask> {
@@ -238,6 +259,8 @@ impl TimerManager {
         if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
             task.status = status;
         }
+        drop(tasks);
+        self.save().await;
     }
 
     pub async fn update_task_remaining(&self, task_id: &str, remaining: u64) {
