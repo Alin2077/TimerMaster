@@ -64,14 +64,14 @@ export default function SingleTimer({ onTaskCreated }: SingleTimerProps) {
       return;
     }
 
-    // 构建 action 参数
+    // 构建 action 参数（匹配 Rust 端 serde rename）
     let action: any = null;
     if (actionType === "shutdown") {
-      action = { Shutdown: null };
+      action = "shutdown";
     } else if (actionType === "open" && actionPath) {
-      action = { OpenApp: { path: actionPath } };
+      action = { open: { path: actionPath } };
     } else if (actionType === "script" && actionPath) {
-      action = { RunScript: { path: actionPath } };
+      action = { script: { path: actionPath } };
     }
 
     const taskTitle = title.trim() || `倒计时 ${formatTime(totalSecs)}`;

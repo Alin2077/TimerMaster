@@ -59,9 +59,9 @@ export default function RepeatingReminder({ onTaskCreated }: RepeatingReminderPr
     const cat = category === "未分类" ? null : category;
 
     let action: any = null;
-    if (actionType === "shutdown") action = { Shutdown: null };
-    else if (actionType === "open" && actionPath) action = { OpenApp: { path: actionPath } };
-    else if (actionType === "script" && actionPath) action = { RunScript: { path: actionPath } };
+    if (actionType === "shutdown") action = "shutdown";
+    else if (actionType === "open" && actionPath) action = { open: { path: actionPath } };
+    else if (actionType === "script" && actionPath) action = { script: { path: actionPath } };
 
     let repeatRule: any = null;
     switch (repeatType) {
