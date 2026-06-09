@@ -80,11 +80,11 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
 
       if (repeatType !== "none") {
         switch (repeatType) {
-          case "daily": repeatRule = { Daily: null }; break;
-          case "weekdays": repeatRule = { Weekdays: null }; break;
-          case "weekly": repeatRule = { Weekly: { day_of_week: weekDay } }; break;
-          case "monthly": repeatRule = { Monthly: { day_of_month: monthDay } }; break;
-          default: repeatRule = { Interval: { interval_minutes: parseInt(intervalMin) || 45 } };
+          case "daily": repeatRule = "daily"; break;
+          case "weekdays": repeatRule = "weekdays"; break;
+          case "weekly": repeatRule = { weekly: { day_of_week: weekDay } }; break;
+          case "monthly": repeatRule = { monthly: { day_of_month: monthDay } }; break;
+          default: repeatRule = { interval: { interval_minutes: parseInt(intervalMin) || 45 } };
         }
       }
 
