@@ -626,3 +626,53 @@ input:focus, select:focus {
   display: inline-block;
   animation: digitPop 0.3s ease-out;
 }
+
+
+/* ── ① Toggle 弹簧回弹 ── */
+@keyframes toggleSpring {
+  0%   { left: var(--from); }
+  40%  { left: var(--to-over); }
+  70%  { left: var(--to-back); }
+  100% { left: var(--to); }
+}
+.toggle-knob {
+  transition: none !important;
+}
+.toggle-knob.anim {
+  animation: toggleSpring 0.4s ease-out forwards;
+}
+
+/* ── ② 设置项依次滑入 ── */
+@keyframes settingSlide {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.setting-row {
+  animation: settingSlide 0.3s ease-out both;
+}
+.setting-row:nth-child(1) { animation-delay: 0.00s; }
+.setting-row:nth-child(2) { animation-delay: 0.06s; }
+.setting-row:nth-child(3) { animation-delay: 0.12s; }
+.setting-row:nth-child(4) { animation-delay: 0.18s; }
+.setting-row:nth-child(5) { animation-delay: 0.24s; }
+
+/* ── ③ 主题图标翻转 ── */
+@keyframes iconFlip {
+  0%   { transform: rotate(0deg); }
+  50%  { transform: rotate(180deg); }
+  100% { transform: rotate(360deg); }
+}
+.theme-icon {
+  display: inline-block;
+  animation: iconFlip 0.5s ease-out;
+}
+
+/* ── ④ 已保存弹入 ── */
+@keyframes popIn {
+  0%   { transform: scale(0); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.saved-pop {
+  animation: popIn 0.35s ease-out;
+}
