@@ -476,3 +476,59 @@ button:active {
 .task-cat-bar {
   width: 4px; border-radius: 2px; flex-shrink: 0;
 }
+
+
+/* ── ① 按钮选中弹跳 ── */
+@keyframes bounceIn {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.08); }
+  70%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+.btn-bounce {
+  animation: bounceIn 0.35s ease-out;
+}
+
+/* ── ② 输入框聚焦发光 ── */
+input:focus, select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-blue-transparent), 0 0 8px rgba(102,126,234,0.3);
+  border-color: var(--accent-blue) !important;
+}
+
+/* ── ③ 数字滚入 ── */
+@keyframes slideNumberIn {
+  from { transform: translateY(-8px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+.num-anim {
+  animation: slideNumberIn 0.2s ease-out;
+}
+
+/* ── ④ 创建按钮呼吸 ── */
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 6px rgba(102,126,234,0.2); }
+  50%      { box-shadow: 0 0 18px rgba(102,126,234,0.5); }
+}
+.btn-primary {
+  animation: breathe 2.5s ease-in-out infinite;
+}
+.btn-primary:active {
+  animation: none !important;
+}
+
+/* ── ⑤ 分段依次淡入 ── */
+@keyframes sectionIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.section-anim {
+  animation: sectionIn 0.3s ease-out both;
+}
+.section-anim:nth-child(1) { animation-delay: 0.00s; }
+.section-anim:nth-child(2) { animation-delay: 0.06s; }
+.section-anim:nth-child(3) { animation-delay: 0.12s; }
+.section-anim:nth-child(4) { animation-delay: 0.18s; }
+.section-anim:nth-child(5) { animation-delay: 0.24s; }
+.section-anim:nth-child(6) { animation-delay: 0.30s; }
+.section-anim:nth-child(7) { animation-delay: 0.36s; }
