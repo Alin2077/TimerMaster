@@ -1,0 +1,15 @@
+{
+  "mcp": {
+    "servers": [
+      {
+        "name": "codegraph",
+        "command": "codegraph",
+        "args": ["serve"]
+      }
+    ]
+  },
+  "optimization": {
+    "cache": true,
+    "contextPartition": "three-zone"
+  }
+}

@@ -1,21 +1,55 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 
 interface SettingsProps {
   theme: "dark" | "light";
   onThemeChange: (t: "dark" | "light") => void;
 }
 
+function Toggle({ value, onChange }: { value: boolean; onChange: () => void }) {
+  return (
+    <button
+      onClick={onChange}
+      style={{
+        width: 48,
+        height: 26,
+        borderRadius: 13,
+        border: "none",
+        background: value ? "var(--accent-green)" : "#555",
+        cursor: "pointer",
+        position: "relative",
+        transition: "background 0.2s",
+      }}
+    >
+      <div
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: 11,
+          background: "#fff",
+          position: "absolute",
+          top: 2,
+          left: value ? 24 : 2,
+          transition: "left 0.2s",
+        }}
+      />
+    </button>
+  );
+}
+
 export default function Settings({ theme, onThemeChange }: SettingsProps) {
   const [onTop, setOnTop] = useState(false);
+  const [autoStart, setAutoStart] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    // 读取保存的主题偏好
     const savedTheme = localStorage.getItem("timermaster-theme");
     if (savedTheme === "light" || savedTheme === "dark") {
       onThemeChange(savedTheme);
     }
+    // 读取开机自启状态
+    isEnabled().then(setAutoStart).catch(() => {});
   }, []);
 
   const handleToggleOnTop = useCallback(async () => {
@@ -30,6 +64,18 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
     }
   }, [onTop]);
 
+  const handleAutoStartToggle = useCallback(async () => {
+    const newVal = !autoStart;
+    setAutoStart(newVal);
+    try {
+      if (newVal) await enable();
+      else await disable();
+    } catch (e) {
+      console.error("Failed to toggle autostart:", e);
+      setAutoStart(!newVal);
+    }
+  }, [autoStart]);
+
   const handleThemeToggle = useCallback(() => {
     const newTheme = theme === "dark" ? "light" : "dark";
     onThemeChange(newTheme);
@@ -41,7 +87,6 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
     try {
       const data = await invoke("export_data");
       const json = JSON.stringify(data, null, 2);
-      // 通过 Blob 下载
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -58,67 +103,28 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
     <div className="card">
       <div className="card-title">⚙️ 设置</div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {/* 窗口置顶 */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "12px 0",
-            borderBottom: "1px solid var(--border-color)",
-          }}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {/* 开机自启 */}
+        <SettingRow
+          title="开机自启"
+          desc="电脑启动时自动运行 TimerMaster"
         >
-          <div>
-            <div style={{ fontWeight: 500 }}>窗口置顶</div>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
-              保持窗口在其他应用之上
-            </div>
-          </div>
-          <button
-            onClick={handleToggleOnTop}
-            style={{
-              width: 48,
-              height: 26,
-              borderRadius: 13,
-              border: "none",
-              background: onTop ? "var(--accent-green)" : "#555",
-              cursor: "pointer",
-              position: "relative",
-              transition: "background 0.2s",
-            }}
-          >
-            <div
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: 11,
-                background: "#fff",
-                position: "absolute",
-                top: 2,
-                left: onTop ? 24 : 2,
-                transition: "left 0.2s",
-              }}
-            />
-          </button>
-        </div>
+          <Toggle value={autoStart} onChange={handleAutoStartToggle} />
+        </SettingRow>
+
+        {/* 窗口置顶 */}
+        <SettingRow
+          title="窗口置顶"
+          desc="保持窗口在其他应用之上"
+        >
+          <Toggle value={onTop} onChange={handleToggleOnTop} />
+        </SettingRow>
 
         {/* 主题切换 */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "12px 0",
-            borderBottom: "1px solid var(--border-color)",
-          }}
+        <SettingRow
+          title="界面主题"
+          desc={`当前：${theme === "dark" ? "深色🌙" : "浅色☀️"}`}
         >
-          <div>
-            <div style={{ fontWeight: 500 }}>界面主题</div>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
-              当前：{theme === "dark" ? "深色🌙" : "浅色☀️"}
-            </div>
-          </div>
           <button
             onClick={handleThemeToggle}
             style={{
@@ -133,7 +139,7 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
           >
             {theme === "dark" ? "☀️ 浅色" : "🌙 深色"}
           </button>
-        </div>
+        </SettingRow>
 
         {/* 全局快捷键 */}
         <div
@@ -160,20 +166,10 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
         </div>
 
         {/* 数据导出 */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "12px 0",
-          }}
+        <SettingRow
+          title="数据导出"
+          desc="导出任务记录为 JSON 文件"
         >
-          <div>
-            <div style={{ fontWeight: 500 }}>数据导出</div>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
-              导出任务记录为 JSON 文件
-            </div>
-          </div>
           <button
             onClick={handleExport}
             style={{
@@ -188,7 +184,7 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
           >
             📥 导出
           </button>
-        </div>
+        </SettingRow>
 
         {saved && (
           <div
@@ -203,6 +199,36 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function SettingRow({
+  title,
+  desc,
+  children,
+}: {
+  title: string;
+  desc: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "12px 0",
+        borderBottom: "1px solid var(--border-color)",
+      }}
+    >
+      <div>
+        <div style={{ fontWeight: 500 }}>{title}</div>
+        <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+          {desc}
+        </div>
+      </div>
+      {children}
     </div>
   );
 }
