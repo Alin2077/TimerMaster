@@ -1,10 +1,10 @@
 """
 TimerMaster 一键构建 + 发布脚本
-用法: python scripts/build-and-release.py [版本号] [GitHub Token]
-  例如: python scripts/build-and-release.py v1.0.0
-       python scripts/build-and-release.py v1.1.0 ghp_xxx
-
-如果没有指定版本号，则自动读取 src-tauri/tauri.conf.json 中的版本
+用法:
+  python scripts/build-and-release.py patch  <GitHub Token>   # 2.0.0 → 2.0.1（修订号+1）
+  python scripts/build-and-release.py minor <GitHub Token>   # 2.0.1 → 2.1.0（次版本+1）
+  python scripts/build-and-release.py major <GitHub Token>   # 2.1.0 → 3.0.0（主版本+1）
+  python scripts/build-and-release.py v2.0.1 <GitHub Token>  # 显式指定版本号
 """
 import os
 import sys
@@ -33,6 +33,62 @@ def run(cmd, cwd=None):
     return result
 
 
+def read_current_version():
+    """从 tauri.conf.json 读取当前版本号."""
+    conf_path = os.path.join(PROJECT_DIR, "src-tauri", "tauri.conf.json")
+    with open(conf_path, "r") as f:
+        conf = json.load(f)
+    return conf["version"]
+
+
+def bump_version(current: str, bump_type: str) -> str:
+    """
+    根据 SemVer 规则递增版本号：
+    - patch: 2.0.0 → 2.0.1  (修订号+1)
+    - minor: 2.0.1 → 2.1.0  (次版本+1, 修订号归零)
+    - major: 2.1.0 → 3.0.0  (主版本+1, 次版本+修订号归零)
+    """
+    parts = current.split(".")
+    major = int(parts[0])
+    minor = int(parts[1]) if len(parts) > 1 else 0
+    patch = int(parts[2]) if len(parts) > 2 else 0
+
+    if bump_type == "major":
+        return f"{major + 1}.0.0"
+    elif bump_type == "minor":
+        return f"{major}.{minor + 1}.0"
+    else:  # patch
+        return f"{major}.{minor}.{patch + 1}"
+
+
+def update_version_in_files(new_version: str):
+    """更新 tauri.conf.json 和 Cargo.toml 中的版本号."""
+    # 更新 tauri.conf.json
+    conf_path = os.path.join(PROJECT_DIR, "src-tauri", "tauri.conf.json")
+    with open(conf_path, "r") as f:
+        conf = json.load(f)
+    old_version = conf["version"]
+    conf["version"] = new_version
+    with open(conf_path, "w") as f:
+        json.dump(conf, f, indent=2)
+    print(f"  📝 tauri.conf.json: {old_version} → {new_version}")
+
+    # 更新 Cargo.toml
+    cargo_path = os.path.join(PROJECT_DIR, "src-tauri", "Cargo.toml")
+    with open(cargo_path, "r") as f:
+        cargo = f.read()
+    cargo = re.sub(
+        r'^version\s*=\s*"[^"]+"',
+        f'version = "{new_version}"',
+        cargo,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    with open(cargo_path, "w") as f:
+        f.write(cargo)
+    print(f"  📝 Cargo.toml: {old_version} → {new_version}")
+
+
 def get_commit_log_since_last_tag():
     """获取自上一个标签以来的 commit 日志作为更新日志."""
     result = subprocess.run(
@@ -41,8 +97,6 @@ def get_commit_log_since_last_tag():
     )
     lines = result.stdout.strip().split("\n")
 
-    # 找到第一个 tag 之前的所有 commit
-    # 或者直接拿最近 50 条
     notes = []
     for line in lines[:50]:
         match = re.match(r'^([a-f0-9]+)\s+(.*)', line)
@@ -52,43 +106,50 @@ def get_commit_log_since_last_tag():
 
 
 def main():
-    # 从命令行参数或环境变量获取 Token
-    github_token = ""
-    if len(sys.argv) > 2:
-        github_token = sys.argv[2]
-    elif os.environ.get("GH_TOKEN"):
-        github_token = os.environ["GH_TOKEN"]
-    elif os.environ.get("GITHUB_TOKEN"):
-        github_token = os.environ["GITHUB_TOKEN"]
-
-    if not github_token:
-        print("❌ 需要 GitHub Token：python scripts/build-and-release.py v1.0.0 <你的Token>")
-        print("   或设置环境变量 GH_TOKEN")
+    # ── 0. 解析参数 ──
+    if len(sys.argv) < 2:
+        print("❌ 用法:")
+        print("   python scripts/build-and-release.py patch  <Token>   # 修订号+1")
+        print("   python scripts/build-and-release.py minor <Token>   # 次版本+1")
+        print("   python scripts/build-and-release.py major <Token>   # 主版本+1")
+        print("   python scripts/build-and-release.py v2.0.1 <Token>  # 指定版本")
         sys.exit(1)
 
-    # ── 1. 确定版本号 ──
-    if len(sys.argv) > 1:
-        tag = sys.argv[1].lstrip("v")
-        tag = f"v{tag}"
-    else:
-        # 从 tauri.conf.json 读取版本
-        conf_path = os.path.join(PROJECT_DIR, "src-tauri", "tauri.conf.json")
-        with open(conf_path, "r") as f:
-            conf = json.load(f)
-        tag = f"v{conf['version']}"
+    bump_type_or_version = sys.argv[1]
+    github_token = sys.argv[2] if len(sys.argv) > 2 else ""
 
-    version = tag.lstrip("v")
+    if not github_token:
+        github_token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
+
+    if not github_token:
+        print("❌ 需要 GitHub Token")
+        sys.exit(1)
+
+    # ── 1. 计算版本号 ──
+    if bump_type_or_version.startswith("v"):
+        # 显式指定版本号（向后兼容）
+        tag = bump_type_or_version
+        version = tag.lstrip("v")
+        # 更新文件中的版本号
+        update_version_in_files(version)
+    elif bump_type_or_version in ("patch", "minor", "major"):
+        current = read_current_version()
+        version = bump_version(current, bump_type_or_version)
+        tag = f"v{version}"
+        update_version_in_files(version)
+        print(f"  🔼 自增类型: {bump_type_or_version}")
+    else:
+        print(f"❌ 不认识的参数: {bump_type_or_version}，请用 patch/minor/major 或 vx.y.z")
+        sys.exit(1)
+
     print(f"📦 版本: {tag}")
 
     # ── 2. 构建安装包 ──
-    print("\n🔨 步骤1: 安装 npm 依赖...")
-    run(["npm", "install"])
-
-    print("\n🔨 步骤2: 构建 Tauri 应用...")
+    print("\n🔨 步骤1: 构建 Tauri 应用...")
     run(["npm", "run", "tauri", "build"])
 
     # ── 3. 生成 updater.json ──
-    print("\n📝 步骤3: 生成 updater.json...")
+    print("\n📝 步骤2: 生成 updater.json...")
     nsis_dir = os.path.join(
         PROJECT_DIR, "src-tauri", "target", "release", "bundle", "nsis"
     )
@@ -97,7 +158,6 @@ def main():
 
     if not os.path.exists(installer_path):
         print(f"❌ 安装包未找到: {installer_path}")
-        # 尝试查找其他 .exe
         exe_files = [f for f in os.listdir(nsis_dir) if f.endswith(".exe")]
         if exe_files:
             installer_name = exe_files[0]
@@ -112,7 +172,7 @@ def main():
 
     updater = {
         "version": version,
-        "notes": f"TimerMaster {version}",
+        "notes": f"TimerMaster {tag}",
         "pub_date": datetime.now(timezone.utc).isoformat(),
         "platforms": {
             "windows-x86_64": {
@@ -133,34 +193,33 @@ def main():
     print(f"  ✅ updater.json 已生成（CDN 副本）")
 
     # ── 4. 生成更新日志 ──
-    print("\n📝 步骤4: 生成更新日志...")
+    print("\n📝 步骤3: 生成更新日志...")
     release_notes = get_commit_log_since_last_tag()
     print(release_notes[:500])
 
-    # ── 5. 提交 updater.json 到 Git（供 CDN 同步） ──
-    print(f"\n📝 步骤5: 提交 updater.json...")
-    subprocess.run(["git", "add", "updater.json"], cwd=PROJECT_DIR,
-                   capture_output=True)
+    # ── 5. 提交版本号修改 + updater.json 到 Git ──
+    print(f"\n📝 步骤4: 提交版本文件...")
+    subprocess.run(["git", "add", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml",
+                     "updater.json", "src-tauri/Cargo.lock"],
+                    cwd=PROJECT_DIR, capture_output=True)
     subprocess.run(
-        ["git", "commit", "-m", f"chore: update updater.json for {tag}"],
+        ["git", "commit", "--allow-empty", "-m", f"chore: bump to {tag}"],
         cwd=PROJECT_DIR, capture_output=True,
     )
     subprocess.run(["git", "push"], cwd=PROJECT_DIR, capture_output=True)
 
     # ── 6. 打 Git 标签 ──
-    print(f"\n🏷️  步骤6: 打标签 {tag}...")
-    # 删除已存在的本地标签
-    subprocess.run(["git", "tag", "-d", tag], cwd=PROJECT_DIR,
-                   capture_output=True)
+    print(f"\n🏷️  步骤5: 打标签 {tag}...")
+    subprocess.run(["git", "tag", "-d", tag], cwd=PROJECT_DIR, capture_output=True)
     result = run(["git", "tag", tag])
 
-    # ── 6. 推送标签到 GitHub ──
+    # ── 7. 推送标签到 GitHub ──
     print(f"\n📤 步骤6: 推送标签到 GitHub...")
     subprocess.run(["git", "push", "--delete", "origin", tag],
                    cwd=PROJECT_DIR, capture_output=True)
     run(["git", "push", "origin", tag])
 
-    # ── 7. 上传到 GitHub Releases ──
+    # ── 8. 上传到 GitHub Releases ──
     print(f"\n📤 步骤7: 创建 Release 并上传安装包...")
     import requests
 
