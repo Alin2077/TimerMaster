@@ -1,15 +1,17 @@
 """
 TimerMaster 一键构建 + 发布脚本
 用法:
-  python scripts/build-and-release.py                  # 自动判断 + 环境变量 Token
-  python scripts/build-and-release.py <Token>          # 自动判断 + 传 Token
-  python scripts/build-and-release.py patch <Token>    # 指定递增类型
-  python scripts/build-and-release.py v2.0.1 <Token>  # 显式指定版本号
+  python scripts/build-and-release.py                  # patch（最常用）
+  python scripts/build-and-release.py <Token>          # patch + 传 Token
+  python scripts/build-and-release.py patch <Token>    # 明确 patch
+  python scripts/build-and-release.py minor <Token>    # 次版本 +1
+  python scripts/build-and-release.py major <Token>    # 主版本 +1
+  python scripts/build-and-release.py v2.0.1 <Token>   # 指定任意版本
 
-自动判断规则（根据最近 commit）:
-  - 含"新增/feat/新功能" → minor  (2.0.0 → 2.1.0)
-  - 含"重大/BREAKING"   → major  (2.1.0 → 3.0.0)
-  - 其他（修 Bug）      → patch  (2.0.1 → 2.0.2)
+版本规则:
+  不指定 → 默认 patch  (4.3.0 → 4.3.1)  ← 修 Bug / 小改动
+  指定 minor → 次版本 +1 (4.3.0 → 4.4.0)  ← 加新功能
+  指定 major → 主版本 +1 (4.3.0 → 5.0.0)  ← 重大改动
 """
 import os
 import sys
@@ -211,10 +213,16 @@ def main():
         print("   用法: set GH_TOKEN=ghp_xxx && python scripts/build-and-release.py")
         sys.exit(1)
 
-    # ── 如果自动检测 ──
+    # ── 默认 patch ──
     if bump_type_or_version == "auto":
-        bump_type_or_version = detect_bump_type()
-        print(f"  🔍 自动检测: {bump_type_or_version}")
+        # 看看是否在 commit 里有 BREAKING CHANGE，有的话升 minor
+        detected = detect_bump_type()
+        if detected == "major":
+            bump_type_or_version = "minor"  # 保守一点，最多升 minor
+            print(f"  🔍 检测到重大变更，升 minor")
+        else:
+            bump_type_or_version = "patch"
+            print(f"  🔍 默认 patch（未指定版本号）")
 
     # ── 1. 计算版本号 ──
     if bump_type_or_version.startswith("v"):
