@@ -566,3 +566,63 @@ input:focus, select:focus {
 .running-card:nth-child(3) { animation-delay: 0.16s; }
 .running-card:nth-child(4) { animation-delay: 0.24s; }
 .running-card:nth-child(5) { animation-delay: 0.32s; }
+
+
+/* ── 统计卡片错开入场 ── */
+@keyframes slideFromLeft {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideFromRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideFromBottom {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.stat-card:nth-child(1) { animation: slideFromLeft 0.4s ease-out both; }
+.stat-card:nth-child(2) { animation: slideFromBottom 0.4s ease-out both; animation-delay: 0.10s; }
+.stat-card:nth-child(3) { animation: slideFromRight 0.4s ease-out both; animation-delay: 0.20s; }
+
+/* ── 环形图绘制 ── */
+@keyframes drawRing {
+  from { stroke-dasharray: 0 314; }
+  to   { stroke-dasharray: var(--target) 314; }
+}
+.ring-anim {
+  animation: drawRing 1s ease-out forwards;
+}
+
+/* ── 分类条依次填满 ── */
+@keyframes fillBar {
+  from { width: 0 !important; }
+  to   { width: var(--target-width); }
+}
+.cat-bar {
+  animation: fillBar 0.6s ease-out both;
+}
+.cat-bar:nth-child(1) { animation-delay: 0.0s; }
+.cat-bar:nth-child(2) { animation-delay: 0.15s; }
+.cat-bar:nth-child(3) { animation-delay: 0.30s; }
+.cat-bar:nth-child(4) { animation-delay: 0.45s; }
+
+/* ── 百分比脉冲 ── */
+@keyframes statPulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50%      { transform: translate(-50%, -50%) scale(1.06); }
+}
+.stat-pulse {
+  animation: statPulse 2s ease-in-out infinite;
+}
+
+/* ── 数字滚入 ── */
+@keyframes digitPop {
+  0%   { transform: translateY(-6px); opacity: 0; }
+  60%  { transform: translateY(2px); opacity: 1; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.digit-pop {
+  display: inline-block;
+  animation: digitPop 0.3s ease-out;
+}
