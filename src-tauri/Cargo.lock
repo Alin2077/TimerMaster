@@ -4235,7 +4235,7 @@ dependencies = [
 
 [[package]]
 name = "timer-master"
-version = "4.10.0"
+version = "4.10.1"
 dependencies = [
  "chrono",
  "rusqlite",
