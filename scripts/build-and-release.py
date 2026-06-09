@@ -96,26 +96,40 @@ def update_version_in_files(new_version: str):
 
 def detect_bump_type() -> str:
     """
-    根据 commit 消息自动判断版本递增类型：
-    - major: 包含 "BREAKING CHANGE" 或 "major" 或 "大版本" 或 "不兼容"
-    - minor: 包含 "feat:" 或 "feature" 或 "新增" 或 "新功能" 或 "新页面"
-    - patch: 其他（修 Bug、小改动、文档、chore 等）
+    只分析自上一个标签以来的 commit，自动判断版本递增类型：
+    - major: 包含 "BREAKING CHANGE" 或 "大版本" 或 "不兼容"
+    - minor: 包含 "feat:" 或 "新增" 或 "新功能"
+    - patch: 其他（修 Bug、chore、文档等）
     """
-    result = subprocess.run(
-        ["git", "log", "--oneline", "--no-decorate", "-30"],
-        cwd=PROJECT_DIR, capture_output=True, text=True
+    # 获取最后一个标签
+    last_tag_result = subprocess.run(
+        ["git", "describe", "--tags", "--abbrev=0"],
+        cwd=PROJECT_DIR, capture_output=True, text=True,
     )
+    if last_tag_result.returncode == 0:
+        last_tag = last_tag_result.stdout.strip()
+        # 只获取自上一个标签以来的 commit
+        result = subprocess.run(
+            ["git", "log", f"{last_tag}..HEAD", "--oneline", "--no-decorate"],
+            cwd=PROJECT_DIR, capture_output=True, text=True,
+        )
+    else:
+        # 没有标签，取最近 30 条
+        result = subprocess.run(
+            ["git", "log", "--oneline", "--no-decorate", "-30"],
+            cwd=PROJECT_DIR, capture_output=True, text=True,
+        )
+
     log = result.stdout.lower()
 
     # 检查是否包含重大变更关键词
-    major_keywords = ["breaking change", "major", "大版本", "不兼容", "重构", "重写"]
+    major_keywords = ["breaking change", "大版本", "不兼容", "breaking"]
     for kw in major_keywords:
         if kw in log:
             return "major"
 
     # 检查是否包含新功能关键词
-    minor_keywords = ["feat:", "feature", "新增", "新功能", "新页面", "新组件",
-                      "添加", "支持", "升级", "增加"]
+    minor_keywords = ["feat:", "新增", "新功能", "新页面", "新组件"]
     for kw in minor_keywords:
         if kw in log:
             return "minor"
