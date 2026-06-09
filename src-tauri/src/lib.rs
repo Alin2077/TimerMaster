@@ -41,6 +41,23 @@ pub struct AppState {
 }
 
 #[tauri::command]
+/// 计算指定时间点到现在的秒数
+fn calc_seconds_until(scheduled_at: &str) -> Result<u64, String> {
+    let now = chrono::Local::now();
+    let parsed = chrono::NaiveDateTime::parse_from_str(
+        scheduled_at,
+        "%Y-%m-%d %H:%M",
+    ).map_err(|e| format!("时间格式错误: {}", e))?;
+    let target = parsed.and_local_timezone(chrono::Local).earliest()
+        .ok_or_else(|| "无效的时区转换".to_string())?;
+    if target <= now {
+        return Err("指定时间已过，请选择未来的时间".to_string());
+    }
+    let secs = (target - now).num_seconds() as u64;
+    Ok(secs)
+}
+
+#[tauri::command]
 async fn create_single_timer(
     app: AppHandle,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -50,19 +67,28 @@ async fn create_single_timer(
     priority: Option<u32>,
     persistent: Option<bool>,
     action: Option<TaskAction>,
+    scheduled_at: Option<String>,
 ) -> Result<TimerTask, String> {
     let state = state.lock().await;
+    // 如果指定了时间点，计算剩余秒数
+    let actual_secs = if let Some(ref at) = scheduled_at {
+        calc_seconds_until(at)?
+    } else {
+        duration_secs
+    };
+
     let task = state
         .timer_manager
         .add_task(
             title.clone(),
             TaskType::Single,
-            duration_secs,
+            actual_secs,  // 用实际秒数
             category,
             priority,
             None,
             persistent,
             action.clone(),
+            scheduled_at,
         )
         .await;
 
@@ -164,6 +190,7 @@ async fn create_repeating_timer(
             repeat_rule,
             persistent,
             action.clone(),
+            None, // repeating 不用 scheduled_at
         )
         .await;
 

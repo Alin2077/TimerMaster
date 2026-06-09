@@ -16,7 +16,11 @@ impl Database {
         let db_path = data_dir.join("tasks.db");
         let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
 
-        // 执行迁移：建表
+        // 执行迁移：建表 + 加列（兼容旧数据库）
+        conn.execute_batch(
+            "ALTER TABLE tasks ADD COLUMN scheduled_at TEXT;"
+        ).ok(); // 忽略错误（列已存在时）
+
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS tasks (
                 id              TEXT PRIMARY KEY,
@@ -69,8 +73,8 @@ impl Database {
     fn insert_task_inner(conn: &Connection, task: &TimerTask) -> Result<(), String> {
         conn.execute(
             "INSERT OR IGNORE INTO tasks (id, title, task_type, duration_secs, remaining_secs,
-             status, created_at, category, priority, repeat_rule, persistent, completed_at, action)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+             status, created_at, category, priority, repeat_rule, persistent, completed_at, action, scheduled_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 task.id,
                 task.title,
@@ -85,6 +89,7 @@ impl Database {
                 task.persistent.map(|b| if b { 1 } else { 0 }),
                 task.completed_at,
                 task.action.as_ref().map(|a| serde_json::to_string(a).unwrap_or_default()),
+                task.scheduled_at,
             ],
         ).map_err(|e| e.to_string())?;
         Ok(())
@@ -128,13 +133,14 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn.prepare(
             "SELECT id, title, task_type, duration_secs, remaining_secs, status, created_at,
-                    category, priority, repeat_rule, persistent, completed_at, action
+                    category, priority, repeat_rule, persistent, completed_at, action, scheduled_at
              FROM tasks ORDER BY created_at DESC"
         ).map_err(|e| e.to_string())?;
 
         let rows = stmt.query_map([], |row| {
             let repeat_rule_str: Option<String> = row.get(9)?;
             let action_str: Option<String> = row.get(12)?;
+            let scheduled_at: Option<String> = row.get(13)?;
 
             Ok(TimerTask {
                 id: row.get(0)?,
@@ -150,6 +156,7 @@ impl Database {
                 persistent: row.get::<_, Option<i64>>(10)?.map(|v| v != 0),
                 completed_at: row.get(11)?,
                 action: action_str.and_then(|s| serde_json::from_str(&s).ok()),
+                scheduled_at,
             })
         }).map_err(|e| e.to_string())?;
 

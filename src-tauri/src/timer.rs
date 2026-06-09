@@ -28,6 +28,8 @@ pub struct TimerTask {
     pub completed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub action: Option<TaskAction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,6 +130,7 @@ impl TimerManager {
         repeat_rule: Option<RepeatRule>,
         persistent: Option<bool>,
         action: Option<TaskAction>,
+        scheduled_at: Option<String>,
     ) -> TimerTask {
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         let task = TimerTask {
@@ -144,6 +147,7 @@ impl TimerManager {
             persistent,
             completed_at: None,
             action,
+            scheduled_at,
         };
 
         // 写入数据库
