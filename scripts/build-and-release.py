@@ -1,10 +1,15 @@
 """
 TimerMaster 一键构建 + 发布脚本
 用法:
-  python scripts/build-and-release.py patch  <GitHub Token>   # 2.0.0 → 2.0.1（修订号+1）
-  python scripts/build-and-release.py minor <GitHub Token>   # 2.0.1 → 2.1.0（次版本+1）
-  python scripts/build-and-release.py major <GitHub Token>   # 2.1.0 → 3.0.0（主版本+1）
-  python scripts/build-and-release.py v2.0.1 <GitHub Token>  # 显式指定版本号
+  python scripts/build-and-release.py                  # 自动判断 + 环境变量 Token
+  python scripts/build-and-release.py <Token>          # 自动判断 + 传 Token
+  python scripts/build-and-release.py patch <Token>    # 指定递增类型
+  python scripts/build-and-release.py v2.0.1 <Token>  # 显式指定版本号
+
+自动判断规则（根据最近 commit）:
+  - 含"新增/feat/新功能" → minor  (2.0.0 → 2.1.0)
+  - 含"重大/BREAKING"   → major  (2.1.0 → 3.0.0)
+  - 其他（修 Bug）      → patch  (2.0.1 → 2.0.2)
 """
 import os
 import sys
@@ -89,6 +94,36 @@ def update_version_in_files(new_version: str):
     print(f"  📝 Cargo.toml: {old_version} → {new_version}")
 
 
+def detect_bump_type() -> str:
+    """
+    根据 commit 消息自动判断版本递增类型：
+    - major: 包含 "BREAKING CHANGE" 或 "major" 或 "大版本" 或 "不兼容"
+    - minor: 包含 "feat:" 或 "feature" 或 "新增" 或 "新功能" 或 "新页面"
+    - patch: 其他（修 Bug、小改动、文档、chore 等）
+    """
+    result = subprocess.run(
+        ["git", "log", "--oneline", "--no-decorate", "-30"],
+        cwd=PROJECT_DIR, capture_output=True, text=True
+    )
+    log = result.stdout.lower()
+
+    # 检查是否包含重大变更关键词
+    major_keywords = ["breaking change", "major", "大版本", "不兼容", "重构", "重写"]
+    for kw in major_keywords:
+        if kw in log:
+            return "major"
+
+    # 检查是否包含新功能关键词
+    minor_keywords = ["feat:", "feature", "新增", "新功能", "新页面", "新组件",
+                      "添加", "支持", "升级", "增加"]
+    for kw in minor_keywords:
+        if kw in log:
+            return "minor"
+
+    # 默认 patch
+    return "patch"
+
+
 def get_commit_log_since_last_tag():
     """获取自上一个标签以来的 commit 日志作为更新日志."""
     result = subprocess.run(
@@ -107,23 +142,40 @@ def get_commit_log_since_last_tag():
 
 def main():
     # ── 0. 解析参数 ──
-    if len(sys.argv) < 2:
-        print("❌ 用法:")
-        print("   python scripts/build-and-release.py patch  <Token>   # 修订号+1")
-        print("   python scripts/build-and-release.py minor <Token>   # 次版本+1")
-        print("   python scripts/build-and-release.py major <Token>   # 主版本+1")
-        print("   python scripts/build-and-release.py v2.0.1 <Token>  # 指定版本")
-        sys.exit(1)
+    # 用法:
+    #   python scripts/build-and-release.py              # 自动检测 + 从环境变量读 Token
+    #   python scripts/build-and-release.py <Token>      # 自动检测 + 显式传 Token
+    #   python scripts/build-and-release.py minor <Token> # 手动指定 + 显式传 Token
+    #   python scripts/build-and-release.py v2.0.1 <Token> # 指定版本
 
-    bump_type_or_version = sys.argv[1]
-    github_token = sys.argv[2] if len(sys.argv) > 2 else ""
+    bump_type_or_version = "auto"
+    github_token = ""
 
-    if not github_token:
+    if len(sys.argv) == 1:
+        # 无参数：自动检测，从环境变量读 Token
+        bump_type_or_version = "auto"
         github_token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
+    elif len(sys.argv) == 2:
+        arg = sys.argv[1]
+        if arg.startswith("v") or arg in ("patch", "minor", "major"):
+            bump_type_or_version = arg
+            github_token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
+        else:
+            bump_type_or_version = "auto"
+            github_token = arg
+    else:
+        bump_type_or_version = sys.argv[1]
+        github_token = sys.argv[2]
 
     if not github_token:
         print("❌ 需要 GitHub Token")
+        print("   用法: set GH_TOKEN=ghp_xxx && python scripts/build-and-release.py")
         sys.exit(1)
+
+    # ── 如果自动检测 ──
+    if bump_type_or_version == "auto":
+        bump_type_or_version = detect_bump_type()
+        print(f"  🔍 自动检测: {bump_type_or_version}")
 
     # ── 1. 计算版本号 ──
     if bump_type_or_version.startswith("v"):
