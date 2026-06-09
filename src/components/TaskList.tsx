@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useToast } from "./Toast";
 
 interface TimerTask {
   id: string;
@@ -43,6 +44,7 @@ function getStatusLabel(status: string): string {
 }
 
 export default function TaskList() {
+  const toast = useToast();
   const [tasks, setTasks] = useState<TimerTask[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -86,6 +88,19 @@ export default function TaskList() {
       }
     },
     [fetchTasks]
+  );
+
+  const handleDelete = useCallback(
+    async (taskId: string) => {
+      try {
+        await invoke("delete_one_task_entry", { taskId });
+        fetchTasks();
+        toast("已删除", "info");
+      } catch (e) {
+        console.error("Failed to delete task:", e);
+      }
+    },
+    [fetchTasks, toast]
   );
 
   const sortedTasks = [...tasks].sort((a, b) => {
@@ -175,15 +190,20 @@ export default function TaskList() {
                   {task.created_at}
                 </div>
               </div>
-              {task.status === "running" && (
-                <button
-                  className="btn btn-danger"
-                  onClick={() => handleCancel(task.id)}
-                  style={{ fontSize: 11, padding: "4px 10px" }}
-                >
-                  取消
-                </button>
-              )}
+              <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                {task.status === "running" && (
+                  <button className="btn btn-danger" onClick={() => handleCancel(task.id)}
+                    style={{ fontSize: 11, padding: "4px 10px" }}>
+                    取消
+                  </button>
+                )}
+                {task.status !== "running" && (
+                  <button className="btn btn-danger" onClick={() => handleDelete(task.id)}
+                    style={{ fontSize: 11, padding: "4px 10px", background: "#555" }}>
+                    🗑
+                  </button>
+                )}
+              </div>
             </div>
             ); // close return
           })}

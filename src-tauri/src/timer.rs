@@ -194,6 +194,19 @@ impl TimerManager {
         let _ = self.db.complete_task(task_id, &now);
     }
 
+    pub async fn hard_delete(&self, task_id: &str) -> bool {
+        let mut tasks = self.tasks.lock().await;
+        tasks.retain(|t| t.id != task_id);
+        drop(tasks);
+        self.db.db_remove_task(task_id).ok();
+        // 清理取消标记
+        let flags = self.cancel_flags.lock().await;
+        if let Some(pos) = flags.iter().position(|(id, _)| id == task_id) {
+            flags[pos].1.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+        true
+    }
+
     pub async fn list_tasks(&self) -> Vec<TimerTask> {
         let tasks = self.tasks.lock().await;
         tasks.clone()

@@ -274,6 +274,16 @@ async fn create_repeating_timer(
 }
 
 #[tauri::command]
+async fn delete_one_task_entry(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    task_id: String,
+) -> Result<(), String> {
+    let state = state.lock().await;
+    state.timer_manager.hard_delete(&task_id).await;
+    Ok(())
+}
+
+#[tauri::command]
 async fn cancel_timer(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     task_id: String,
@@ -420,6 +430,7 @@ pub fn run() {
             create_single_timer,
             create_repeating_timer,
             cancel_timer,
+            delete_one_task_entry,
             complete_task,
             list_timers,
             get_stats,

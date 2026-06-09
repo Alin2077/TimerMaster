@@ -212,6 +212,13 @@ impl Database {
         })
     }
 
+    pub fn db_remove_task(&self, id: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM tasks WHERE id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     pub fn export_all(&self) -> Result<Vec<TimerTask>, String> {
         self.list_all()
     }
