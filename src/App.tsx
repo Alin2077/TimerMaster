@@ -4,6 +4,7 @@ import RunningTimers from "./components/RunningTimers";
 import TaskList from "./components/TaskList";
 import Stats from "./components/Stats";
 import Settings from "./components/Settings";
+import { ToastProvider, useToast } from "./components/Toast";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
@@ -18,7 +19,8 @@ type UpdateState = {
   progress?: number;
 } | null;
 
-export default function App() {
+function AppContent() {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<Tab>("create");
   const [refreshKey, setRefreshKey] = useState(0);
   const [version, setVersion] = useState("");
@@ -120,7 +122,8 @@ export default function App() {
   const handleTaskCreated = useCallback(() => {
     setRefreshKey((k) => k + 1);
     setActiveTab("running");
-  }, []);
+    toast("✅ 任务已创建", "success");
+  }, [toast]);
 
   const handleMinimize = useCallback(async () => {
     try { await invoke("minimize_to_tray"); } catch (_) {}
@@ -145,7 +148,7 @@ export default function App() {
         updateBadge = { text: `⏳ 下载中 ${updateState.progress || 0}%`, color: "var(--accent-orange)", onClick: () => {} };
         break;
       case "ready":
-        updateBadge = { text: `✅ 安装更新 v${updateState.version}`, color: "var(--accent-green)", onClick: handleInstallUpdate };
+        updateBadge = { text: `✅ 安装更新 v${updateState.version}`, color: "var(--accent-green)", onClick: () => { handleInstallUpdate(); toast("🚀 开始安装更新...", "info"); } };
         break;
       case "error":
         updateBadge = { text: `⚠️ v${updateState.version} 下载失败`, color: "var(--accent-orange)", onClick: handleManualCheck };
@@ -211,5 +214,13 @@ export default function App() {
         <p>关闭窗口 = 最小化托盘 · 快捷键 Ctrl+Shift+T · 后台自动检查更新</p>
       </div>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 }

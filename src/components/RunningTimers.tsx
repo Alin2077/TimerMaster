@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useToast } from "./Toast";
 
 interface TimerTask {
   id: string;
@@ -32,6 +33,7 @@ function getTypeIcon(type: string): string {
 }
 
 export default function RunningTimers() {
+  const toast = useToast();
   const [tasks, setTasks] = useState<TimerTask[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -69,11 +71,12 @@ export default function RunningTimers() {
       try {
         await invoke("cancel_timer", { taskId });
         fetchTasks();
+        toast("已取消", "info");
       } catch (e) {
         console.error("Failed to cancel timer:", e);
       }
     },
-    [fetchTasks]
+    [fetchTasks, toast]
   );
 
   const handleComplete = useCallback(
@@ -81,11 +84,12 @@ export default function RunningTimers() {
       try {
         await invoke("complete_task", { taskId });
         fetchTasks();
+        toast("🎉 干得漂亮！", "success");
       } catch (e) {
         console.error("Failed to complete task:", e);
       }
     },
-    [fetchTasks]
+    [fetchTasks, toast]
   );
 
   const runningTasks = tasks.filter((t) => t.status === "running");
@@ -127,12 +131,14 @@ export default function RunningTimers() {
         {runningTasks.map((task) => (
           <div
             key={task.id}
+            className={task.remaining_secs <= 0 ? "task-complete-glow" : ""}
             style={{
               background: "var(--bg-input)",
               borderRadius: 16,
               padding: "20px 16px",
               border: "1px solid var(--border-color)",
               textAlign: "center",
+              transition: "border-color 0.3s",
             }}
           >
             <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>
@@ -159,13 +165,17 @@ export default function RunningTimers() {
             </div>
 
             <div
+              className={task.remaining_secs > 0 && task.remaining_secs <= 10 ? "timer-pulse" : ""}
               style={{
                 fontSize: 48,
                 fontWeight: 700,
                 fontVariantNumeric: "tabular-nums",
-                color: task.type === "repeating" ? "var(--accent-green)" : "var(--accent-blue)",
+                color: task.remaining_secs <= 10 && task.remaining_secs > 0
+                  ? "#e74c3c"
+                  : task.type === "repeating" ? "var(--accent-green)" : "var(--accent-blue)",
                 margin: "8px 0",
                 letterSpacing: 2,
+                transition: "color 0.5s",
               }}
             >
               {formatTime(task.remaining_secs)}

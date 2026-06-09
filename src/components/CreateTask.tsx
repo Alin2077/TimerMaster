@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useToast } from "./Toast";
 
 interface CreateTaskProps {
   onTaskCreated: () => void;
@@ -35,6 +36,7 @@ function nowStr(): string {
 }
 
 export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
+  const toast = useToast();
   const [mode, setMode] = useState<TaskMode>("countdown");
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(false);
@@ -76,7 +78,7 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
         const mins = parseInt(minutes) || 0;
         const secs = parseInt(seconds) || 0;
         durationSecs = mins * 60 + secs;
-        if (durationSecs <= 0) { alert("请设置时间"); setLoading(false); return; }
+        if (durationSecs <= 0) { toast("请设置有效时间", "error"); setLoading(false); return; }
       } else {
         // 转换到后端格式 "YYYY-MM-DD HH:MM"
         scheduled = scheduledAt.replace("T", " ");
@@ -122,7 +124,7 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
       setTitle(""); setActionPath(""); setPersistent(false);
       onTaskCreated();
     } catch (e: any) {
-      alert(String(e?.message || e));
+      toast(String(e?.message || e) || "创建失败", "error");
     } finally {
       setLoading(false);
     }
