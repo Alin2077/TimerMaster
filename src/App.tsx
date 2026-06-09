@@ -125,10 +125,6 @@ function AppContent() {
     toast("✅ 任务已创建", "success");
   }, [toast]);
 
-  const handleMinimize = useCallback(async () => {
-    try { await invoke("minimize_to_tray"); } catch (_) {}
-  }, []);
-
   const tabs: { key: Tab; label: string }[] = [
     { key: "create", label: "➕ 新建" },
     { key: "running", label: "🎯 计时中" },
@@ -164,10 +160,7 @@ function AppContent() {
             <h1>⏱ TimerMaster</h1>
             <p>定时提醒 · 守护健康</p>
           </div>
-          <button onClick={handleMinimize} title="最小化到系统托盘"
-            style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border-color)", borderRadius: 8, color: "var(--text-secondary)", fontSize: 18, cursor: "pointer", lineHeight: 1, marginTop: 2 }}>
-            🔽
-          </button>
+          {/* 关闭窗口自动最小化到托盘，不需单独按钮 */}
         </div>
 
         {/* 版本号 + 更新状态 */}

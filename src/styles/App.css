@@ -676,3 +676,60 @@ input:focus, select:focus {
 .saved-pop {
   animation: popIn 0.35s ease-out;
 }
+
+
+/* ── ① 标题渐变光效 ── */
+@keyframes titleShimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.header h1 {
+  background: linear-gradient(90deg, var(--accent-blue) 0%, #a78bfa 25%, var(--accent-blue) 50%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-size: 200% auto !important;
+  animation: titleShimmer 4s ease-in-out infinite;
+}
+
+/* ── ② Tab 下滑条过渡 ── */
+.tab-btn {
+  position: relative;
+  overflow: hidden;
+}
+.tab-btn::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+  border-radius: 2px;
+  transform: scaleX(0);
+  transition: transform 0.25s ease;
+  transform-origin: center;
+}
+.tab-btn.active::after {
+  transform: scaleX(1);
+}
+
+/* ── ③ 版本号悬停 ── */
+.version-badge {
+  cursor: default;
+  transition: all 0.2s;
+}
+.version-badge:hover {
+  background: var(--accent-blue-transparent) !important;
+  color: var(--accent-blue) !important;
+  border-color: var(--accent-blue) !important;
+  transform: scale(1.05);
+}
+
+/* ── ④ 整页入场 ── */
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.container {
+  animation: pageEnter 0.35s ease-out;
+}
