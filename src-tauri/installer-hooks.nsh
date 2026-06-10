@@ -1,9 +1,7 @@
-; 自定义 NSIS 卸载钩子：保留用户数据
+; TimerMaster NSIS 卸载钩子
+; 保留用户数据（SQLite 数据库）不被卸载器删除
+
 !macro customUnInstall
-  ; 跳过删除 AppData 中的数据文件
-  SetRegView 64
-  DeleteRegKey HKCU "Software\TimerMaster"
-  SetRegView 32
-  DeleteRegKey HKCU "Software\TimerMaster"
-  ; 不删除 AppData 目录，保留数据库
+  ; 不删除 %APPDATA%\com.timermaster.desktop\
+  ; 用户数据（tasks.db）由下次启动时自动复用
 !macroend

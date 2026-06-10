@@ -32,6 +32,7 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
+        "removeAppData": false,
         "installerHooks": "installer-hooks.nsh"
       }
     },
