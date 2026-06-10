@@ -49,6 +49,19 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
   const [intervalMin, setIntervalMin] = useState("45");
   const [weekDay, setWeekDay] = useState(1);
   const [monthDay, setMonthDay] = useState(1);
+
+  // 切换模式时重置状态
+  const handleSetMode = useCallback((m: TaskMode) => {
+    setMode(m);
+    setModeKey((k) => k + 1);
+    if (m === "scheduled") {
+      setRepeatType("none");  // 指定时间默认不重复
+      setMinutes("");
+      setSeconds("");
+    } else {
+      setScheduledAt(nowStr());
+    }
+  }, []);
   const [category, setCategory] = useState("未分类");
   const [actionType, setActionType] = useState<ActionType>("none");
   const [actionPath, setActionPath] = useState("");
@@ -79,7 +92,8 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
         durationSecs = repeatType !== "none" ? (parseInt(intervalMin) || 45) * 60 : 1;
       }
 
-      if (repeatType !== "none") {
+      // 指定时间模式只能单次，强制忽略重复设置
+      if (mode !== "scheduled" && repeatType !== "none") {
         switch (repeatType) {
           case "daily": repeatRule = "daily"; break;
           case "weekdays": repeatRule = "weekdays"; break;
@@ -109,7 +123,12 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
           scheduledAt: scheduled,
         });
       }
-      setTitle(""); setActionPath(""); setPersistent(false);
+      // 重置所有状态
+      setTitle(""); setMinutes(""); setSeconds("");
+      setActionPath(""); setPersistent(false);
+      setRepeatType("none");
+      setCategory("未分类"); setActionType("none");
+      setScheduledAt(nowStr());
       onTaskCreated();
     } catch (e: any) {
       toast(String(e?.message || e) || "创建失败", "error");
@@ -135,7 +154,7 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
       <div className="section-anim">
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           {(["countdown", "scheduled"] as TaskMode[]).map((m) => (
-            <button key={m} onClick={() => { setMode(m); setModeKey((k) => k + 1); }}
+            <button key={m} onClick={() => handleSetMode(m)}
               className={mode === m ? "btn-bounce" : ""}
               style={{
                 flex: 1, padding: "10px 0", borderRadius: 10,
