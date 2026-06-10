@@ -321,6 +321,52 @@ async fn get_stats(
 }
 
 #[tauri::command]
+async fn json_import_cmd(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    json_data: String,
+) -> Result<(usize, usize), String> {
+    let tasks: Vec<TimerTask> = serde_json::from_str(&json_data)
+        .map_err(|e| format!("JSON 格式错误: {}", e))?;
+    let state = state.lock().await;
+    Ok(state.timer_manager.import_tasks(tasks).await)
+}
+
+#[tauri::command]
+async fn get_import_tpl() -> Result<String, String> {
+    let template = r#"[
+  {
+    "title": "喝水提醒",
+    "type": "repeating",
+    "duration_secs": 1800,
+    "remaining_secs": 1800,
+    "status": "running",
+    "category": "休息",
+    "repeat_rule": { "interval": { "interval_minutes": 30 } },
+    "persistent": false
+  },
+  {
+    "title": "下班关机",
+    "type": "single",
+    "duration_secs": 28800,
+    "remaining_secs": 28800,
+    "status": "running",
+    "category": "工作",
+    "action": "shutdown"
+  },
+  {
+    "title": "周三例会",
+    "type": "single",
+    "duration_secs": 900,
+    "remaining_secs": 900,
+    "status": "running",
+    "category": "工作",
+    "scheduled_at": "2026-06-17 14:00"
+  }
+]"#;
+    Ok(template.to_string())
+}
+
+#[tauri::command]
 async fn export_data(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<Vec<TimerTask>, String> {
@@ -434,6 +480,8 @@ pub fn run() {
             complete_task,
             list_timers,
             get_stats,
+            json_import_cmd,
+            get_import_tpl,
             export_data,
             minimize_to_tray,
             set_always_on_top,

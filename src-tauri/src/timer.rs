@@ -207,6 +207,24 @@ impl TimerManager {
         true
     }
 
+    pub async fn import_tasks(&self, tasks: Vec<TimerTask>) -> (usize, usize) {
+        let mut success = 0;
+        let mut fail = 0;
+        for task in &tasks {
+            if self.db.insert_task(task).is_ok() {
+                success += 1;
+            } else {
+                fail += 1;
+            }
+        }
+        // 重新加载到内存
+        if let Ok(loaded) = self.db.list_all() {
+            let mut mem = self.tasks.lock().await;
+            *mem = loaded;
+        }
+        (success, fail)
+    }
+
     pub async fn list_tasks(&self) -> Vec<TimerTask> {
         let tasks = self.tasks.lock().await;
         tasks.clone()

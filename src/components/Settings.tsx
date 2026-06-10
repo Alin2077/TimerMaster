@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
+import { useToast } from "./Toast";
 
 interface SettingsProps {
   theme: "dark" | "light";
@@ -20,11 +21,14 @@ function Toggle({ value, onChange, animKey }: { value: boolean; onChange: () => 
 }
 
 export default function Settings({ theme, onThemeChange }: SettingsProps) {
+  const toast = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [onTop, setOnTop] = useState(false);
   const [autoStart, setAutoStart] = useState(false);
   const [saved, setSaved] = useState(false);
   const [animKey, setAnimKey] = useState(0);
   const [themeFlip, setThemeFlip] = useState(0);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("timermaster-theme");
@@ -48,6 +52,45 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
     localStorage.setItem("timermaster-theme", newTheme);
     document.body.className = newTheme === "light" ? "light" : "";
   }, [theme, onThemeChange]);
+
+  const handleDownloadTemplate = useCallback(async () => {
+    try {
+      const template = await invoke<string>("get_import_tpl");
+      const blob = new Blob([template], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "TimerMaster_import_template.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast("✅ 模板已下载", "success");
+    } catch (e) {
+      toast("下载失败", "error");
+    }
+  }, [toast]);
+
+  const handleImport = useCallback(async () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  }, []);
+
+  const handleFileSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) { setImporting(false); return; }
+
+    try {
+      const text = await file.text();
+      const result = await invoke<[number, number]>("json_import_cmd", { jsonData: text });
+      const [success, fail] = result;
+      toast(`✅ 导入完成：成功 ${success} 条${fail > 0 ? `，失败 ${fail} 条` : ""}`, fail > 0 ? "info" : "success");
+    } catch (e: any) {
+      toast(`导入失败: ${e?.message || e}`, "error");
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  }, [toast]);
 
   const handleExport = useCallback(async () => {
     try {
@@ -92,6 +135,20 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
             style={{ padding: "6px 16px", borderRadius: 8, border: "1px solid var(--accent-blue)", background: "transparent", color: "var(--accent-blue)", cursor: "pointer", fontSize: 13 }}>
             📥 导出
           </button>
+        </SettingRow>
+
+        <SettingRow className="setting-row" title="数据导入" desc="导入 JSON 文件中的任务">
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={handleDownloadTemplate}
+              style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid var(--border-color)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", fontSize: 12 }}>
+              📄 模板
+            </button>
+            <button onClick={handleImport} disabled={importing}
+              style={{ padding: "6px 16px", borderRadius: 8, border: "1px solid var(--accent-green)", background: importing ? "var(--accent-green-transparent)" : "transparent", color: "var(--accent-green)", cursor: importing ? "not-allowed" : "pointer", fontSize: 13 }}>
+              {importing ? "导入中..." : "📂 导入"}
+            </button>
+          </div>
+          <input ref={fileInputRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleFileSelected} />
         </SettingRow>
         {saved && (
           <div className="saved-pop" style={{ textAlign: "center", fontSize: 12, color: "var(--accent-green)", padding: 4 }}>
