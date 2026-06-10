@@ -55,11 +55,9 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
     setMode(m);
     setModeKey((k) => k + 1);
     if (m === "scheduled") {
-      setRepeatType("none");  // 指定时间默认不重复
-      setMinutes("");
-      setSeconds("");
+      setMinutes(""); setSeconds("");
     } else {
-      setScheduledAt(nowStr());
+      setScheduledAt(nowStr()); setRepeatType("none");
     }
   }, []);
   const [category, setCategory] = useState("未分类");
@@ -202,20 +200,31 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
           </>
         ) : (
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 6 }}>选择日期和时间</div>
-            <input type="datetime-local" value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)}
-              style={{ width: "100%", padding: "10px 12px", fontSize: 14, background: "var(--bg-input)", border: "1px solid var(--border-color)", borderRadius: 8, color: "var(--text-primary)" }} />
+            <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 6 }}>
+              {repeatType === "none" ? "选择日期和时间" : "选择时间"}
+            </div>
+            {repeatType === "none" ? (
+              <input type="datetime-local" value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                style={{ width: "100%", padding: "10px 12px", fontSize: 14, background: "var(--bg-input)", border: "1px solid var(--border-color)", borderRadius: 8, color: "var(--text-primary)" }} />
+            ) : (
+              <input type="time" value={scheduledAt.slice(11, 16)}
+                onChange={(e) => setScheduledAt(`2000-01-01T${e.target.value}`)}
+                style={{ width: "100%", padding: "10px 12px", fontSize: 14, background: "var(--bg-input)", border: "1px solid var(--border-color)", borderRadius: 8, color: "var(--text-primary)" }} />
+            )}
           </div>
         )}
       </div>
 
-      {/* 重复规则 — 静态 */}
+      {/* 重复规则 — 指定时间不显示"间隔" */}
       <div className="section-anim">
         <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: "var(--text-secondary)" }}>重复</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-          {([{key:"none",label:"不重复"},{key:"interval",label:"间隔"},{key:"daily",label:"每天"},{key:"weekdays",label:"工作日"},{key:"weekly",label:"每周"},{key:"monthly",label:"每月"}] as {key:RepeatType;label:string}[]).map((r) => (
-            <button key={r.key} onClick={() => setRepeatType(r.key)}
+          {(mode === "countdown"
+            ? [{key:"none",label:"不重复"},{key:"interval",label:"间隔"},{key:"daily",label:"每天"},{key:"weekdays",label:"工作日"},{key:"weekly",label:"每周"},{key:"monthly",label:"每月"}]
+            : [{key:"none",label:"不重复"},{key:"daily",label:"每天"},{key:"weekdays",label:"工作日"},{key:"weekly",label:"每周"},{key:"monthly",label:"每月"}]
+          ).map((r) => (
+            <button key={r.key} onClick={() => setRepeatType(r.key as RepeatType)}
               style={{ padding: "4px 12px", borderRadius: 8, border: "1px solid var(--border-color)", background: repeatType === r.key ? "var(--accent-blue)" : "transparent", color: repeatType === r.key ? "#fff" : "var(--text-secondary)", fontSize: 12, cursor: "pointer" }}>
               {r.label}
             </button>
