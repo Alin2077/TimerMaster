@@ -113,22 +113,27 @@ const [checkingManual, setCheckingManual] = useState(false);
         }
       }
 
-      // 合并数据并创建 Blob
+      // 创建下载
       const blob = new Blob(chunks as BlobPart[], { type: "application/x-msdownload" });
       const blobUrl = URL.createObjectURL(blob);
 
-      // 触发浏览器下载（弹出保存窗口）
+      // 用 window.location 直接导航到 blob URL 触发下载
       const a = document.createElement("a");
       a.href = blobUrl;
       a.download = `TimerMaster_${version}_x64-setup.exe`;
+      a.target = "_blank";
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
+
+      // 延迟清理，确保浏览器已打开下载对话框
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      }, 5000);
 
       setUpdateState((s) => s ? { ...s, status: "ready", progress: 100 } : s);
       setTimeout(() => setUpdateState(null), 10000);
-      toast("✅ 下载完成！请打开下载的安装包安装", "success");
+      toast("✅ 下载完成！浏览器弹出保存对话框", "success");
     } catch (e) {
       console.error("Download failed:", e);
       setUpdateState((s) => s ? { ...s, status: "error" } : s);
