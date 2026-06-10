@@ -107,7 +107,16 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
       else if (actionType === "open" && actionPath) action = { open: { path: actionPath } };
       else if (actionType === "script" && actionPath) action = { script: { path: actionPath } };
 
-      const taskTitle = title.trim() || (mode === "countdown" ? `倒计时 ${durationSecs}s` : `定时提醒`);
+      let taskTitle = title.trim();
+      if (!taskTitle) {
+        if (mode === "countdown" && repeatType !== "none") {
+          taskTitle = `每${Math.floor(durationSecs / 60)}分钟提醒`;
+        } else if (mode === "scheduled") {
+          taskTitle = "定时提醒";
+        } else {
+          taskTitle = `倒计时 ${Math.floor(durationSecs / 60)}分${durationSecs % 60 > 0 ? durationSecs % 60 + "秒" : ""}`;
+        }
+      }
 
       if (repeatType !== "none") {
         await invoke("create_repeating_timer", {
