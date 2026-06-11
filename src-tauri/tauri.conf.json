@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoc/tauri/v2/crates/tauri-utils/schema.json",
   "productName": "TimerMaster",
-  "version": "4.16.4",
+  "version": "4.17.0",
   "identifier": "com.timermaster.desktop",
   "build": {
     "frontendDist": "../dist",
