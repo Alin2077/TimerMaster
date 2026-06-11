@@ -173,22 +173,13 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
 
         let total: i64 = conn.query_row("SELECT COUNT(*) FROM tasks", [], |r| r.get(0)).unwrap_or(0);
-        let completed: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM tasks WHERE status = '\"completed\"'", [], |r| r.get(0)
-        ).unwrap_or(0);
-        let cancelled: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM tasks WHERE status = '\"cancelled\"'", [], |r| r.get(0)
-        ).unwrap_or(0);
         let running: i64 = conn.query_row(
             "SELECT COUNT(*) FROM tasks WHERE status = '\"running\"'", [], |r| r.get(0)
         ).unwrap_or(0);
 
-        let completion_rate = if total > 0 { (completed as f64 / total as f64) * 100.0 } else { 0.0 };
-
         // 分类统计
         let mut stmt = conn.prepare(
-            "SELECT COALESCE(category, '未分类') as cat, COUNT(*) as cnt,
-                    SUM(CASE WHEN status = '\"completed\"' THEN 1 ELSE 0 END) as done
+            "SELECT COALESCE(category, '未分类') as cat, COUNT(*) as cnt
              FROM tasks GROUP BY cat"
         ).map_err(|e| e.to_string())?;
 
@@ -196,7 +187,20 @@ impl Database {
             Ok(crate::timer::CategoryStat {
                 category: row.get(0)?,
                 total: row.get::<_, i64>(1)? as usize,
-                completed: row.get::<_, i64>(2)? as usize,
+            })
+        }).map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+        // 类型统计
+        let mut stmt2 = conn.prepare(
+            "SELECT task_type, COUNT(*) as cnt FROM tasks GROUP BY task_type"
+        ).map_err(|e| e.to_string())?;
+
+        let by_type: Vec<crate::timer::TypeStat> = stmt2.query_map([], |row| {
+            Ok(crate::timer::TypeStat {
+                task_type: row.get::<_, String>(0)?,
+                total: row.get::<_, i64>(1)? as usize,
             })
         }).map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
@@ -204,11 +208,9 @@ impl Database {
 
         Ok(crate::timer::TaskStats {
             total: total as usize,
-            completed: completed as usize,
-            cancelled: cancelled as usize,
             running: running as usize,
-            completion_rate,
             by_category,
+            by_type,
         })
     }
 

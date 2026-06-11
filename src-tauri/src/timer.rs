@@ -81,18 +81,21 @@ pub enum RepeatRule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskStats {
     pub total: usize,
-    pub completed: usize,
-    pub cancelled: usize,
     pub running: usize,
-    pub completion_rate: f64,
     pub by_category: Vec<CategoryStat>,
+    pub by_type: Vec<TypeStat>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CategoryStat {
     pub category: String,
     pub total: usize,
-    pub completed: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TypeStat {
+    pub task_type: String,
+    pub total: usize,
 }
 
 pub struct TimerManager {
@@ -232,8 +235,7 @@ impl TimerManager {
 
     pub async fn get_stats(&self) -> TaskStats {
         self.db.get_stats().unwrap_or(TaskStats {
-            total: 0, completed: 0, cancelled: 0, running: 0,
-            completion_rate: 0.0, by_category: vec![],
+            total: 0, running: 0, by_category: vec![], by_type: vec![],
         })
     }
 
