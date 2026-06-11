@@ -253,6 +253,23 @@ impl TimerManager {
         flags.retain(|(id, _)| id != task_id);
     }
 
+    pub async fn pause_task(&self, task_id: &str) -> bool {
+        let mut tasks = self.tasks.lock().await;
+        if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
+            task.status = TaskStatus::Paused;
+        }
+        drop(tasks);
+        let _ = self.db.update_status(task_id, &TaskStatus::Paused);
+        // 设置取消标记停止 tokio 循环
+        let flags = self.cancel_flags.lock().await;
+        if let Some(pos) = flags.iter().position(|(id, _)| id == task_id) {
+            flags[pos].1.store(true, std::sync::atomic::Ordering::SeqCst);
+            true
+        } else {
+            false
+        }
+    }
+
     pub async fn update_task_status(&self, task_id: &str, status: TaskStatus) {
         let mut tasks = self.tasks.lock().await;
         if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {

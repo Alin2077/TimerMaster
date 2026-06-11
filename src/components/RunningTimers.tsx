@@ -69,6 +69,24 @@ export default function RunningTimers() {
     };
   }, []);
 
+  const handlePause = useCallback(async (taskId: string) => {
+    try {
+      await invoke("pause_timer", { taskId });
+      fetchTasks();
+      toast("已暂停", "info");
+    } catch (e) { console.error(e); }
+  }, [fetchTasks, toast]);
+
+  const handleResume = useCallback(async (taskId: string) => {
+    try {
+      await invoke("resume_timer", { taskId });
+      fetchTasks();
+      toast("已继续", "info");
+    } catch (e: any) {
+      toast(String(e?.message || e), "error");
+    }
+  }, [fetchTasks, toast]);
+
   const handleCancel = useCallback(
     async (taskId: string) => {
       try {
@@ -95,7 +113,7 @@ export default function RunningTimers() {
     [fetchTasks, toast]
   );
 
-  const runningTasks = tasks.filter((t) => t.status === "running");
+  const runningTasks = tasks.filter((t) => t.status === "running" || t.status === "paused");
 
   if (loading) {
     return (
@@ -114,7 +132,7 @@ export default function RunningTimers() {
           <div className="emoji">⏳</div>
           <p>当前没有正在运行的任务</p>
           <p style={{ marginTop: 4, fontSize: 12, color: "var(--text-muted)" }}>
-            切换到「单次定时器」或「重复提醒」开始计时
+            在「➕ 新建」创建任务，开始计时
           </p>
         </div>
       </div>
@@ -177,6 +195,11 @@ export default function RunningTimers() {
                     ⏰ {task.scheduled_at.slice(11, 16)}
                   </span>
                 )}
+                {task.status === "paused" && (
+                  <span style={{ marginLeft: 6, fontSize: 11, padding: "1px 6px", borderRadius: 8, background: "var(--accent-orange-transparent)", color: "var(--accent-orange)" }}>
+                    ⏸ 已暂停
+                  </span>
+                )}
               </div>
 
               <div style={{ position: "relative" }}>
@@ -211,17 +234,28 @@ export default function RunningTimers() {
                 <div className="progress-bar" style={{ width: `${progress}%`, background: barColor }} />
               </div>
 
-              <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                {task.remaining_secs <= 0 || (task.duration_secs - task.remaining_secs) >= task.duration_secs ? (
+              <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
+                {task.status === "paused" ? (
+                  <button className="btn btn-success" onClick={() => handleResume(task.id)}
+                    style={{ fontSize: 12, padding: "6px 14px" }}>
+                    ▶ 继续
+                  </button>
+                ) : task.remaining_secs <= 0 || (task.duration_secs - task.remaining_secs) >= task.duration_secs ? (
                   <button className="btn btn-success" onClick={() => handleComplete(task.id)}
-                    style={{ fontSize: 12, padding: "6px 20px" }}>
-                    ✅ 确认完成
+                    style={{ fontSize: 12, padding: "6px 14px" }}>
+                    ✅ 完成
                   </button>
                 ) : (
-                  <button className="btn btn-danger" onClick={() => handleCancel(task.id)}
-                    style={{ fontSize: 12, padding: "6px 20px" }}>
-                    ⏹ 取消
-                  </button>
+                  <>
+                    <button className="btn btn-danger" onClick={() => handlePause(task.id)}
+                      style={{ fontSize: 12, padding: "6px 14px" }}>
+                      ⏸ 暂停
+                    </button>
+                    <button className="btn btn-danger" onClick={() => handleCancel(task.id)}
+                      style={{ fontSize: 12, padding: "6px 14px", background: "#555" }}>
+                      ⏹
+                    </button>
+                  </>
                 )}
               </div>
             </div>

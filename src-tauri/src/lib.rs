@@ -284,6 +284,60 @@ async fn delete_one_task_entry(
 }
 
 #[tauri::command]
+async fn pause_timer(
+    _app: AppHandle,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    task_id: String,
+) -> Result<(), String> {
+    let state = state.lock().await;
+    state.timer_manager.pause_task(&task_id).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn resume_timer(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    task_id: String,
+) -> Result<(), String> {
+    let state = state.lock().await;
+    let tasks = state.timer_manager.list_tasks().await;
+    let task = tasks.into_iter().find(|t| t.id == task_id)
+        .ok_or_else(|| "任务不存在".to_string())?;
+
+    let remaining = task.remaining_secs;
+    if remaining == 0 { return Err("任务已完成".to_string()); }
+
+    state.timer_manager.update_task_status(&task_id, TaskStatus::Running).await;
+
+    let app_c = app.clone();
+    let mgr = state.timer_manager.clone();
+    let tid = task_id.clone();
+    let ttl = task.title.clone();
+    let act = task.action.clone();
+
+    tokio::spawn(async move {
+        for elapsed in 0..=remaining {
+            let r = remaining - elapsed;
+            mgr.update_task_remaining(&tid, r).await;
+            let _ = app_c.emit("timer-tick",
+                serde_json::json!({"id": tid, "remaining": r, "total": remaining}));
+            if elapsed < remaining { tokio::time::sleep(Duration::from_secs(1)).await; }
+        }
+        mgr.update_task_status(&tid, TaskStatus::Completed).await;
+        use tauri_plugin_notification::NotificationExt;
+        let _ = app_c.notification().builder()
+            .title("⏰ TimerMaster")
+            .body(format!("「{}」计时完成！", ttl)).show();
+        if let Some(ref a) = act {
+            if !matches!(a, TaskAction::None) { execute_action(a, &ttl); }
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn cancel_timer(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     task_id: String,
@@ -522,6 +576,8 @@ pub fn run() {
             create_single_timer,
             create_repeating_timer,
             cancel_timer,
+            pause_timer,
+            resume_timer,
             delete_one_task_entry,
             complete_task,
             list_timers,
