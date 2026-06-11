@@ -218,12 +218,12 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
         )}
       </div>
 
-      {/* 重复规则 — 指定时间不显示"间隔" */}
+      {/* 重复规则 — 倒计时只有间隔，指定时间只有日期类 */}
       <div className="section-anim">
         <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: "var(--text-secondary)" }}>重复</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
           {(mode === "countdown"
-            ? [{key:"none",label:"不重复"},{key:"interval",label:"间隔"},{key:"daily",label:"每天"},{key:"weekdays",label:"工作日"},{key:"weekly",label:"每周"},{key:"monthly",label:"每月"}]
+            ? [{key:"none",label:"不重复"},{key:"interval",label:"间隔"}]
             : [{key:"none",label:"不重复"},{key:"daily",label:"每天"},{key:"weekdays",label:"工作日"},{key:"weekly",label:"每周"},{key:"monthly",label:"每月"}]
           ).map((r) => (
             <button key={r.key} onClick={() => setRepeatType(r.key as RepeatType)}
