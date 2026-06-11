@@ -83,61 +83,35 @@ const [checkingManual, setCheckingManual] = useState(false);
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
-  // ── 安装更新（在软件内下载，显示进度）──
+  // ── 安装更新（触发浏览器原生下载，绕过 fetch + Blob 的兼容问题）──
   const handleInstallUpdate = useCallback(async () => {
     const upd = updateObjRef.current;
     if (!upd || updateState?.status !== "pending") return;
 
-    setUpdateState((s) => s ? { ...s, status: "downloading", progress: 0 } : s);
-    toast("开始下载...", "info");
+    setUpdateState(null);
+    toast("正在打开下载页面...", "info");
 
     try {
       const version = upd.version;
       const url = `https://github.com/Alin2077/TimerMaster/releases/download/v${version}/TimerMaster_${version}_x64-setup.exe`;
 
-      // 用 fetch 流式下载，实时更新进度
-      const res = await fetch(url);
-      const total = Number(res.headers.get("content-length") || 0);
-      const reader = res.body!.getReader();
-      let received = 0;
-      const chunks: Uint8Array[] = [];
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        received += value.length;
-        if (total) {
-          const pct = Math.round((received / total) * 100);
-          setUpdateState((s) => s ? { ...s, progress: pct } : s);
-        }
-      }
-
-      // 创建下载
-      const blob = new Blob(chunks as BlobPart[], { type: "application/x-msdownload" });
-      const blobUrl = URL.createObjectURL(blob);
-
-      // 用 window.location 直接导航到 blob URL 触发下载
+      // 直接用 <a> 触发浏览器原生下载（和手动点击下载一样可靠）
       const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = `TimerMaster_${version}_x64-setup.exe`;
+      a.href = url;
       a.target = "_blank";
+      a.rel = "noopener noreferrer";
       document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
 
-      // 延迟清理，确保浏览器已打开下载对话框
+      // 下载后提示
       setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      }, 5000);
-
-      setUpdateState((s) => s ? { ...s, status: "ready", progress: 100 } : s);
-      setTimeout(() => setUpdateState(null), 10000);
-      toast("✅ 下载完成！浏览器弹出保存对话框", "success");
+        setUpdateState(null);
+        toast("浏览器已开始下载，下载完成后双击安装", "info");
+      }, 2000);
     } catch (e) {
       console.error("Download failed:", e);
-      setUpdateState((s) => s ? { ...s, status: "error" } : s);
-      toast("下载失败，可手动去 GitHub 下载", "error");
+      toast("下载失败，可手动去 GitHub Releases 下载", "error");
     }
   }, [updateState, toast]);
 
@@ -183,21 +157,8 @@ const [checkingManual, setCheckingManual] = useState(false);
 
   // 更新按钮的显示
   let updateBadge: { text: string; color: string; onClick: () => void } | null = null;
-  if (updateState) {
-    switch (updateState.status) {
-      case "pending":
-        updateBadge = { text: `⬇️ v${updateState.version} 下载`, color: "var(--accent-blue)", onClick: handleInstallUpdate };
-        break;
-      case "downloading":
-        updateBadge = { text: `⏳ ${updateState.progress || 0}%`, color: "var(--accent-orange)", onClick: () => {} };
-        break;
-      case "ready":
-        updateBadge = { text: `✅ 已下载，请安装`, color: "var(--accent-green)", onClick: () => {} };
-        break;
-      case "error":
-        updateBadge = { text: `⚠️ 下载失败`, color: "var(--accent-orange)", onClick: handleManualCheck };
-        break;
-    }
+  if (updateState?.status === "pending") {
+    updateBadge = { text: `⬇️ v${updateState.version} 下载`, color: "var(--accent-blue)", onClick: handleInstallUpdate };
   }
 
   return (
