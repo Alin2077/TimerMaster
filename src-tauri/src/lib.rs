@@ -386,6 +386,45 @@ async fn set_always_on_top(window: WebviewWindow, on_top: bool) -> Result<(), St
     Ok(())
 }
 
+/// 重启所有运行中的计时器（应用关闭后 tokio 任务丢失）
+async fn resume_timers(app: AppHandle, mgr: Arc<TimerManager>) {
+    let tasks = mgr.list_tasks().await;
+    let mut resumed = 0;
+    for task in tasks {
+        if !matches!(task.status, TaskStatus::Running) { continue; }
+        let remaining = task.remaining_secs;
+        if remaining == 0 { continue; }
+
+        let app_c = app.clone();
+        let mgr_c = mgr.clone();
+        let tid = task.id.clone();
+        let ttl = task.title.clone();
+        let act = task.action.clone();
+        resumed += 1;
+
+        tokio::spawn(async move {
+            for elapsed in 0..=remaining {
+                let r = remaining - elapsed;
+                mgr_c.update_task_remaining(&tid, r).await;
+                let _ = app_c.emit("timer-tick",
+                    serde_json::json!({"id": tid, "remaining": r, "total": remaining}));
+                if elapsed < remaining { sleep(Duration::from_secs(1)).await; }
+            }
+            mgr_c.update_task_status(&tid, TaskStatus::Completed).await;
+            use tauri_plugin_notification::NotificationExt;
+            let _ = app_c.notification().builder()
+                .title("⏰ TimerMaster")
+                .body(format!("「{}」计时完成！", ttl)).show();
+            if let Some(ref a) = act {
+                if !matches!(a, TaskAction::None) { execute_action(a, &ttl); }
+            }
+        });
+    }
+    if resumed > 0 {
+        println!("[TimerMaster] 已恢复 {} 个计时器", resumed);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -396,8 +435,15 @@ pub fn run() {
         .setup(|app| {
             // 初始化数据管理（需在 setup 中获取 app 路径）
             let data_dir = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("data"));
+            let timer_mgr = Arc::new(TimerManager::new(data_dir));
+            // 重启运行中的计时器（重开应用后 tokio 任务丢失需要恢复）
+            let handle = app.handle().clone();
+            let mgr_for_resume = timer_mgr.clone();
+            tauri::async_runtime::spawn(async move {
+                resume_timers(handle, mgr_for_resume).await;
+            });
             app.manage(Arc::new(Mutex::new(AppState {
-                timer_manager: Arc::new(TimerManager::new(data_dir)),
+                timer_manager: timer_mgr,
             })));
             use tauri::menu::{Menu, MenuItem};
             use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
