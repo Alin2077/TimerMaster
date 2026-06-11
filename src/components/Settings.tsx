@@ -29,6 +29,9 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
   const [animKey, setAnimKey] = useState(0);
   const [themeFlip, setThemeFlip] = useState(0);
   const [importing, setImporting] = useState(false);
+  const [showTemplate, setShowTemplate] = useState(false);
+  const [templateText, setTemplateText] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("timermaster-theme");
@@ -56,18 +59,22 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
   const handleDownloadTemplate = useCallback(async () => {
     try {
       const template = await invoke<string>("get_import_tpl");
-      const blob = new Blob([template], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "TimerMaster_import_template.json";
-      a.click();
-      URL.revokeObjectURL(url);
-      toast("✅ 模板已下载", "success");
+      setTemplateText(template);
+      setShowTemplate(true);
     } catch (e) {
-      toast("下载失败", "error");
+      toast("加载失败", "error");
     }
   }, [toast]);
+
+  const handleCopyTemplate = useCallback(() => {
+    navigator.clipboard.writeText(templateText).then(() => {
+      setCopied(true);
+      toast("✅ 已复制到剪贴板", "success");
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      toast("复制失败", "error");
+    });
+  }, [templateText, toast]);
 
   const handleImport = useCallback(async () => {
     if (fileInputRef.current) {
@@ -141,7 +148,7 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
           <div style={{ display: "flex", gap: 6 }}>
             <button onClick={handleDownloadTemplate}
               style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid var(--border-color)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", fontSize: 12 }}>
-              📄 模板
+              📄 查看
             </button>
             <button onClick={handleImport} disabled={importing}
               style={{ padding: "6px 16px", borderRadius: 8, border: "1px solid var(--accent-green)", background: importing ? "var(--accent-green-transparent)" : "transparent", color: "var(--accent-green)", cursor: importing ? "not-allowed" : "pointer", fontSize: 13 }}>
@@ -156,6 +163,54 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
           </div>
         )}
       </div>
+
+      {/* ── 模板弹窗 ── */}
+      {showTemplate && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "rgba(0,0,0,0.6)",
+        }} onClick={() => setShowTemplate(false)}>
+          <div style={{
+            background: "var(--bg-card)", borderRadius: 16, padding: "20px",
+            width: 380, maxHeight: "80vh", border: "1px solid var(--border-color)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
+              📄 导入模板
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 10 }}>
+              复制下面的 JSON 模板，修改后保存为 <code>.json</code> 文件，再点击「📂 导入」
+            </div>
+            <textarea readOnly value={templateText}
+              style={{
+                width: "100%", height: 280, padding: 12, fontSize: 11,
+                background: "var(--bg-input)", border: "1px solid var(--border-color)",
+                borderRadius: 8, color: "var(--text-primary)", resize: "none",
+                fontFamily: "monospace", lineHeight: 1.5,
+              }} />
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button onClick={handleCopyTemplate}
+                style={{
+                  flex: 1, padding: "8px 0", borderRadius: 8, border: "none",
+                  background: copied ? "var(--accent-green)" : "var(--accent-blue)",
+                  color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 500,
+                }}>
+                {copied ? "✅ 已复制" : "📋 复制模板"}
+              </button>
+              <button onClick={() => setShowTemplate(false)}
+                style={{
+                  padding: "8px 20px", borderRadius: 8,
+                  border: "1px solid var(--border-color)",
+                  background: "transparent", color: "var(--text-secondary)",
+                  cursor: "pointer", fontSize: 13,
+                }}>
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
