@@ -50,8 +50,25 @@ body {
 .container {
   max-width: 460px;
   margin: 0 auto;
-  padding: 20px;
-  min-height: calc(100vh - 40px);
+  padding: 20px 20px 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 20px;
+  margin-top: 8px;
+}
+.scroll-area::-webkit-scrollbar {
+  width: 4px;
+}
+.scroll-area::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 2px;
 }
 
 .header {

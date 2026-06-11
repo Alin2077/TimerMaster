@@ -223,13 +223,15 @@ const [checkingManual, setCheckingManual] = useState(false);
         ))}
       </div>
 
-      {activeTab === "create" && <CreateTask onTaskCreated={handleTaskCreated} />}
-      {activeTab === "running" && <RunningTimers key={refreshKey} />}
-      {activeTab === "list" && <TaskList key={refreshKey} />}
-      {activeTab === "stats" && <Stats key={refreshKey} />}
-      {activeTab === "settings" && <Settings theme={theme} onThemeChange={handleThemeChange} />}
+      <div className="scroll-area">
+        {activeTab === "create" && <CreateTask onTaskCreated={handleTaskCreated} />}
+        {activeTab === "running" && <RunningTimers key={refreshKey} />}
+        {activeTab === "list" && <TaskList key={refreshKey} />}
+        {activeTab === "stats" && <Stats key={refreshKey} />}
+        {activeTab === "settings" && <Settings theme={theme} onThemeChange={handleThemeChange} />}
+      </div>
 
-      <div style={{ textAlign: "center", marginTop: 16, fontSize: 11, color: "var(--text-muted)" }}>
+      <div style={{ textAlign: "center", padding: "8px 0 12px", fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>
         <p>关闭窗口 = 最小化托盘 · 快捷键 Ctrl+Shift+T · 后台自动检查更新</p>
       </div>
     </div>
