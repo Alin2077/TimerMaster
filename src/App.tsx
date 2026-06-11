@@ -83,37 +83,41 @@ const [checkingManual, setCheckingManual] = useState(false);
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
-  // ── 安装更新（触发浏览器原生下载，绕过 fetch + Blob 的兼容问题）──
+  // ── 后台下载进度 ──
+  const [downloadProg, setDownloadProg] = useState(0);
+
+  useEffect(() => {
+    const unlisten = listen<{ progress: number }>("download-progress", (ev) => {
+      setDownloadProg(ev.payload.progress);
+    });
+    const unlisten2 = listen("download-done", () => {
+      setTimeout(() => { setDownloadProg(0); setUpdateState(null); }, 5000);
+      toast("✅ 下载完成，正在打开安装包", "success");
+    });
+    return () => { unlisten.then((fn) => fn()); unlisten2.then((fn) => fn()); };
+  }, []);
+
+  // ── 安装更新（后端 reqwest 流式下载，发射进度事件）──
   const handleInstallUpdate = useCallback(async () => {
     const upd = updateObjRef.current;
     if (!upd || updateState?.status !== "pending") return;
 
-    setUpdateState(null);
-    toast("正在打开下载页面...", "info");
+    setUpdateState((s) => s ? { ...s, status: "downloading" } : s);
+    setDownloadProg(0);
+    toast("开始下载...", "info");
 
     try {
-      const version = upd.version;
-      const url = `https://github.com/Alin2077/TimerMaster/releases/download/v${version}/TimerMaster_${version}_x64-setup.exe`;
-
-      // 直接用 <a> 触发浏览器原生下载（和手动点击下载一样可靠）
-      const a = document.createElement("a");
-      a.href = url;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-      // 下载后提示
-      setTimeout(() => {
-        setUpdateState(null);
-        toast("浏览器已开始下载，下载完成后双击安装", "info");
-      }, 2000);
-    } catch (e) {
+      await invoke("download_update", { version: upd.version });
+      toast("下载完成，正在打开安装包...", "info");
+    } catch (e: any) {
       console.error("Download failed:", e);
-      toast("下载失败，可手动去 GitHub Releases 下载", "error");
+      setUpdateState((s) => s ? { ...s, status: "error" } : s);
+      setDownloadProg(0);
+      toast(`下载失败: ${e?.message || e}`, "error");
     }
   }, [updateState, toast]);
+
+  // ── 监听下载进度事件 ──
 
   // ── 手动检查更新 ──
   const handleManualCheck = useCallback(async () => {
@@ -157,8 +161,21 @@ const [checkingManual, setCheckingManual] = useState(false);
 
   // 更新按钮的显示
   let updateBadge: { text: string; color: string; onClick: () => void } | null = null;
-  if (updateState?.status === "pending") {
-    updateBadge = { text: `⬇️ v${updateState.version} 下载`, color: "var(--accent-blue)", onClick: handleInstallUpdate };
+  if (updateState) {
+    switch (updateState.status) {
+      case "pending":
+        updateBadge = { text: `⬇️ v${updateState.version} 下载`, color: "var(--accent-blue)", onClick: handleInstallUpdate };
+        break;
+      case "downloading":
+        updateBadge = { text: `⏳ ${downloadProg}%`, color: "var(--accent-orange)", onClick: () => {} };
+        break;
+      case "ready":
+        updateBadge = { text: `✅ 已下载`, color: "var(--accent-green)", onClick: () => {} };
+        break;
+      case "error":
+        updateBadge = { text: `⚠️ 失败`, color: "var(--accent-orange)", onClick: () => { setUpdateState(null); handleManualCheck(); } };
+        break;
+    }
   }
 
   return (

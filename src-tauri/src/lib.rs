@@ -3,6 +3,7 @@ mod timer;
 
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
+use tokio::io::AsyncWriteExt;
 use timer::{TimerManager, TimerTask, TaskStats, TaskStatus, TaskType, TaskAction};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
@@ -423,6 +424,58 @@ async fn get_import_tpl() -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn download_update(
+    app: AppHandle,
+    version: String,
+) -> Result<(), String> {
+    let url = format!(
+        "https://github.com/Alin2077/TimerMaster/releases/download/v{version}/TimerMaster_{version}_x64-setup.exe",
+        version = version
+    );
+    let filename = format!("TimerMaster_{}_x64-setup.exe", version);
+
+    // 下载到临时目录
+    let temp_dir = std::env::temp_dir().join("TimerMaster_update");
+    std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+    let filepath = temp_dir.join(&filename);
+
+    let client = reqwest::Client::builder()
+        .build().map_err(|e| e.to_string())?;
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+
+    let total = resp.content_length().unwrap_or(0);
+    let mut file = tokio::fs::File::create(&filepath).await.map_err(|e| e.to_string())?;
+    let mut downloaded: u64 = 0;
+    let mut stream = resp.bytes_stream();
+
+    use futures_util::StreamExt;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| e.to_string())?;
+        file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+        downloaded += chunk.len() as u64;
+        if total > 0 {
+            let pct = ((downloaded as f64 / total as f64) * 100.0) as u32;
+            let _ = app.emit("download-progress", serde_json::json!({
+                "progress": pct,
+                "downloaded": downloaded,
+                "total": total,
+            }));
+        }
+    }
+    file.flush().await.map_err(|e| e.to_string())?;
+    drop(file);
+
+    // 打开安装包
+    let _ = app.emit("download-done", serde_json::json!({
+        "path": filepath.to_string_lossy(),
+        "filename": filename,
+    }));
+    let _ = opener::open(&filepath);
+    println!("[TimerMaster] 已下载并打开安装包: {}", filepath.display());
+    Ok(())
+}
+
+#[tauri::command]
 async fn export_data(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<Vec<TimerTask>, String> {
@@ -586,6 +639,7 @@ pub fn run() {
             get_stats,
             json_import_cmd,
             get_import_tpl,
+            download_update,
             export_data,
             minimize_to_tray,
             set_always_on_top,
