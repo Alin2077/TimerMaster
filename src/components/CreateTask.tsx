@@ -349,11 +349,16 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
           </div>
         )}
         {actionType === "script" && (
-          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <input type="text" placeholder="选择脚本..." value={actionPath} readOnly
-              style={{ flex: 1, padding: "8px 12px", fontSize: 12, background: "var(--bg-input)", border: "1px solid var(--border-color)", borderRadius: 8, color: "var(--text-primary)" }} />
-            <button onClick={handlePickFile}
-              style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid var(--accent-blue)", background: "transparent", color: "var(--accent-blue)", cursor: "pointer", fontSize: 12 }}>📁 选择</button>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+              <input type="text" placeholder="选择脚本..." value={actionPath} readOnly
+                style={{ flex: 1, padding: "8px 12px", fontSize: 12, background: "var(--bg-input)", border: "1px solid var(--border-color)", borderRadius: 8, color: "var(--text-primary)" }} />
+              <button onClick={handlePickFile}
+                style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid var(--accent-blue)", background: "transparent", color: "var(--accent-blue)", cursor: "pointer", fontSize: 12 }}>📁 选择</button>
+            </div>
+            <div style={{ fontSize: 10, color: "var(--text-muted)" }}>
+              支持 .bat .cmd .ps1 .py .vbs .js 等脚本文件
+            </div>
           </div>
         )}
         {actionType === "shutdown" && (

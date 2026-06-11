@@ -36,9 +36,22 @@ fn execute_action(action: &TaskAction, title: &str) {
         }
         TaskAction::RunScript { path } => {
             println!("[TimerMaster] 执行脚本: {} (任务: {})", path, title);
+            let lower = path.to_lowercase();
             #[cfg(target_os = "windows")]
-            let _ = std::process::Command::new("cmd")
-                .args(["/c", "start", "", path]).spawn();
+            if lower.ends_with(".ps1") {
+                // PowerShell 脚本：绕过执行策略
+                let _ = std::process::Command::new("powershell.exe")
+                    .args(["-ExecutionPolicy", "Bypass", "-File", path])
+                    .spawn();
+            } else if lower.ends_with(".py") {
+                // Python 脚本
+                let _ = std::process::Command::new("python")
+                    .arg(path).spawn();
+            } else {
+                // .bat / .cmd / .vbs / .js 等
+                let _ = std::process::Command::new("cmd")
+                    .args(["/c", "start", "", path]).spawn();
+            }
             #[cfg(not(target_os = "windows"))]
             let _ = std::process::Command::new(path).spawn();
         }
