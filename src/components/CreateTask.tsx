@@ -133,7 +133,8 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
       // 重置所有状态
       setTitle(""); setMinutes(""); setSeconds("");
       setActionPath(""); setPersistent(false);
-      setRepeatType("none");
+      setRepeatType("none"); setIntervalMin("45");
+      setWeekDay(1); setMonthDay(1);
       setCategory("未分类"); setActionType("none");
       setScheduledAt(nowStr());
       onTaskCreated();

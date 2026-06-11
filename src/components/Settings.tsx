@@ -103,15 +103,18 @@ export default function Settings({ theme, onThemeChange }: SettingsProps) {
     try {
       const data = await invoke("export_data");
       const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `TimerMaster_backup_${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) { console.error(e); }
-  }, []);
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const filePath = await save({
+        defaultPath: `TimerMaster_backup_${new Date().toISOString().slice(0, 10)}.json`,
+        filters: [{ name: "JSON 文件", extensions: ["json"] }],
+      });
+      if (filePath) {
+        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+        await writeTextFile(filePath, json);
+        toast("✅ 导出成功", "success");
+      }
+    } catch (e) { console.error(e); toast("导出失败", "error"); }
+  }, [toast]);
 
   return (
     <div className="card">

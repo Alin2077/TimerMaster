@@ -62,8 +62,6 @@ export default function Stats() {
 
   useEffect(() => {
     fetchStats();
-    const interval = setInterval(fetchStats, 5000);
-    return () => clearInterval(interval);
   }, [fetchStats]);
 
   // 动画数字
