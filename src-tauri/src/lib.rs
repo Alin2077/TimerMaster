@@ -181,6 +181,7 @@ async fn create_repeating_timer(
     action: Option<TaskAction>,
 ) -> Result<TimerTask, String> {
     let state = state.lock().await;
+    let repeat_clone = repeat_rule.clone();
     let task = state
         .timer_manager
         .add_task(
@@ -213,6 +214,7 @@ async fn create_repeating_timer(
             if cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
                 break;
             }
+            // 倒计时阶段
             for elapsed in 0..=interval_secs {
                 if cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
                     break;
@@ -241,6 +243,23 @@ async fn create_repeating_timer(
                 if let Some(ref act) = task_action {
                     if !matches!(act, TaskAction::None) {
                         execute_action(act, &task_title);
+                    }
+                }
+
+                // 间隔等待：倒计时完成后等待用户设定的间隔再进入下一轮
+                if let Some(timer::RepeatRule::Interval { interval_minutes }) = &repeat_clone {
+                    let gap_secs = *interval_minutes * 60;
+                    for i in 0..gap_secs {
+                        if cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
+                            break;
+                        }
+                        // 间隔中也发射剩余时间，让 UI 显示等待倒计时
+                        let remaining = gap_secs - i;
+                        let _ = app_clone.emit(
+                            "timer-tick",
+                            serde_json::json!({"id": task_id, "remaining": remaining, "total": interval_secs}),
+                        );
+                        sleep(Duration::from_secs(1)).await;
                     }
                 }
 
