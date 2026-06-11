@@ -116,7 +116,8 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
         }
       }
 
-      if (repeatType !== "none") {
+      // 指定时间不走重复逻辑（重复条件仅用于倒计时模式）
+      if (repeatType !== "none" && mode !== "scheduled") {
         await invoke("create_repeating_timer", {
           title: taskTitle, intervalSecs: durationSecs,
           category: category === "未分类" ? null : category,
