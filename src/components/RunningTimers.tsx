@@ -29,8 +29,10 @@ function formatTime(secs: number): string {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
-function getTypeIcon(type: string): string {
-  return type === "repeating" ? "🔄" : "⏱";
+function getTypeIcon(task: TimerTask): string {
+  if (task.type === "repeating") return "🔄";
+  if (task.scheduled_at) return "⏰";
+  return "⏱";
 }
 
 export default function RunningTimers() {
@@ -179,7 +181,7 @@ export default function RunningTimers() {
 
             <div style={{ flex: 1, padding: "16px 16px 12px", textAlign: "center" }}>
               <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>
-                {getTypeIcon(task.type)} {task.title}
+                {getTypeIcon(task)} {task.title}
                 {task.category && task.category !== "未分类" && (
                   <span style={{ marginLeft: 6, fontSize: 11, padding: "1px 6px", borderRadius: 8, background: `${catColor}33`, color: catColor }}>
                     {task.category}
