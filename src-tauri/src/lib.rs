@@ -315,9 +315,11 @@ async fn resume_timer(
     let tid = task_id.clone();
     let ttl = task.title.clone();
     let act = task.action.clone();
+    let cancel = state.timer_manager.register_cancel_flag(&tid).await;
 
     tokio::spawn(async move {
         for elapsed in 0..=remaining {
+            if cancel.load(std::sync::atomic::Ordering::SeqCst) { break; }
             let r = remaining - elapsed;
             mgr.update_task_remaining(&tid, r).await;
             let _ = app_c.emit("timer-tick",
