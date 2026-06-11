@@ -310,7 +310,11 @@ def main():
     repo_updater_path = os.path.join(PROJECT_DIR, "updater.json")
     with open(repo_updater_path, "w") as f:
         json.dump(updater, f, indent=2)
-    print(f"  ✅ updater.json 已生成（CDN 副本）")
+    # 保存到 docs/ 目录（供 GitHub Pages 发布）
+    docs_path = os.path.join(PROJECT_DIR, "docs", "updater.json")
+    with open(docs_path, "w") as f:
+        json.dump(updater, f, indent=2)
+    print(f"  ✅ updater.json 已生成（CDN + GitHub Pages）")
 
     # ── 4. 生成更新日志 ──
     print("\n📝 步骤3: 生成更新日志...")
@@ -320,7 +324,7 @@ def main():
     # ── 5. 提交版本号修改 + updater.json 到 Git ──
     print(f"\n📝 步骤4: 提交版本文件...")
     subprocess.run(["git", "add", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml",
-                     "updater.json", "src-tauri/Cargo.lock"],
+                     "updater.json", "docs/updater.json", "src-tauri/Cargo.lock"],
                     cwd=PROJECT_DIR, capture_output=True)
     subprocess.run(
         ["git", "commit", "--allow-empty", "-m", f"chore: bump to {tag}"],

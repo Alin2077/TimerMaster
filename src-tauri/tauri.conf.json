@@ -47,8 +47,8 @@
       "active": true,
       "dialog": true,
       "endpoints": [
-        "https://raw.githubusercontent.com/Alin2077/TimerMaster/master/updater.json",
-        "https://cdn.jsdelivr.net/gh/Alin2077/TimerMaster@master/updater.json"
+        "https://alin2077.github.io/TimerMaster/updater.json",
+        "https://raw.githubusercontent.com/Alin2077/TimerMaster/master/updater.json"
       ],
       "pubkey": ""
     }
