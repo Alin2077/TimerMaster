@@ -64,6 +64,23 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
   const [actionType, setActionType] = useState<ActionType>("none");
   const [actionPath, setActionPath] = useState("");
   const [persistent, setPersistent] = useState(false);
+  const [appList, setAppList] = useState<[string,string][]>([]);
+  const [appSearch, setAppSearch] = useState("");
+  const [showAppList, setShowAppList] = useState(false);
+
+  const handleSetActionType = useCallback(async (t: ActionType) => {
+    setActionType(t);
+    setActionPath("");
+    if (t === "open") {
+      try {
+        const list = await invoke<[string,string][]>("list_installed_apps");
+        setAppList(list);
+        setShowAppList(true);
+      } catch { setAppList([]); }
+    } else {
+      setShowAppList(false);
+    }
+  }, []);
 
   const handlePickFile = useCallback(async () => {
     const exts = actionType === "open" ? ["exe","bat","cmd"] : ["bat","ps1","sh","cmd","py"];
@@ -291,7 +308,7 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
         <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: "var(--text-secondary)" }}>执行动作</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
           {(["none","shutdown","open","script"] as ActionType[]).map((t) => (
-            <button key={t} onClick={() => { setActionType(t); setActionPath(""); }}
+            <button key={t} onClick={() => handleSetActionType(t)}
               style={{ padding: "4px 12px", borderRadius: 8, border: "1px solid var(--border-color)", background: actionType === t ? "var(--accent-purple)" : "transparent", color: actionType === t ? "#fff" : "var(--text-secondary)", fontSize: 12, cursor: "pointer" }}>
               {t === "none" ? "无操作" : t === "shutdown" ? "🖥️关机" : t === "open" ? "📂打开" : "▶脚本"}
             </button>
@@ -301,9 +318,39 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
 
       {/* 动作详情 — 动态 */}
       <div key={`act-${actionType}`} className="section-anim">
-        {(actionType === "open" || actionType === "script") && (
+        {actionType === "open" && (
+          <div style={{ marginBottom: 12 }}>
+            {/* 搜索框 */}
+            <input type="text" placeholder="搜索已安装的软件..." value={appSearch}
+              onChange={(e) => setAppSearch(e.target.value)}
+              style={{ width: "100%", padding: "8px 12px", fontSize: 12, marginBottom: 6,
+                background: "var(--bg-input)", border: "1px solid var(--border-color)", borderRadius: 8, color: "var(--text-primary)" }} />
+            {/* 软件列表 */}
+            <div style={{ maxHeight: 160, overflowY: "auto", background: "var(--bg-input)", borderRadius: 8, border: "1px solid var(--border-color)", marginBottom: 6 }}>
+              {appList
+                .filter(([name]) => name.toLowerCase().includes(appSearch.toLowerCase()))
+                .slice(0, 30)
+                .map(([name, path]) => (
+                  <div key={path} onClick={() => { setActionPath(path); setShowAppList(false); }}
+                    style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer", color: actionPath === path ? "var(--accent-blue)" : "var(--text-primary)", background: actionPath === path ? "var(--accent-blue-transparent)" : "transparent", borderBottom: "1px solid var(--border-color)" }}>
+                    <div style={{ fontWeight: 500 }}>{name}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{path}</div>
+                  </div>
+                ))}
+              {appList.length === 0 && <div style={{ padding: "12px", fontSize: 12, color: "var(--text-muted)", textAlign: "center" }}>加载中...</div>}
+            </div>
+            {actionPath && (
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: "var(--accent-green)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>✅ {actionPath}</span>
+                <button onClick={handlePickFile}
+                  style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--accent-blue)", background: "transparent", color: "var(--accent-blue)", cursor: "pointer", fontSize: 11, whiteSpace: "nowrap" }}>📁 浏览</button>
+              </div>
+            )}
+          </div>
+        )}
+        {actionType === "script" && (
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <input type="text" placeholder="选择文件..." value={actionPath} readOnly
+            <input type="text" placeholder="选择脚本..." value={actionPath} readOnly
               style={{ flex: 1, padding: "8px 12px", fontSize: 12, background: "var(--bg-input)", border: "1px solid var(--border-color)", borderRadius: 8, color: "var(--text-primary)" }} />
             <button onClick={handlePickFile}
               style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid var(--accent-blue)", background: "transparent", color: "var(--accent-blue)", cursor: "pointer", fontSize: 12 }}>📁 选择</button>

@@ -28,10 +28,18 @@ fn execute_action(action: &TaskAction, title: &str) {
         }
         TaskAction::OpenApp { path } => {
             println!("[TimerMaster] 打开应用: {} (任务: {})", path, title);
+            #[cfg(target_os = "windows")]
+            let _ = std::process::Command::new("cmd")
+                .args(["/c", "start", "", path]).spawn();
+            #[cfg(not(target_os = "windows"))]
             let _ = std::process::Command::new(path).spawn();
         }
         TaskAction::RunScript { path } => {
             println!("[TimerMaster] 执行脚本: {} (任务: {})", path, title);
+            #[cfg(target_os = "windows")]
+            let _ = std::process::Command::new("cmd")
+                .args(["/c", "start", "", path]).spawn();
+            #[cfg(not(target_os = "windows"))]
             let _ = std::process::Command::new(path).spawn();
         }
     }
@@ -442,6 +450,67 @@ async fn get_import_tpl() -> Result<String, String> {
     Ok(template.to_string())
 }
 
+/// 列出 Windows 已安装的软件（通过注册表）
+#[cfg(target_os = "windows")]
+fn read_installed_from_reg(key_path: &str) -> Vec<(String, String)> {
+    use winreg::enums::*;
+    use winreg::RegKey;
+    let mut apps = Vec::new();
+    let base = match key_path.starts_with("HKLM") {
+        true => RegKey::predef(HKEY_LOCAL_MACHINE),
+        false => RegKey::predef(HKEY_CURRENT_USER),
+    };
+    let sub_path = key_path.trim_start_matches("HKLM\\").trim_start_matches("HKCU\\");
+    if let Ok(enum_key) = base.open_subkey_with_flags(sub_path, KEY_READ) {
+        for name in enum_key.enum_keys().filter_map(|k| k.ok()) {
+            if let Ok(sub) = enum_key.open_subkey_with_flags(&name, KEY_READ) {
+                let display_name: Option<String> = sub.get_value("DisplayName").ok();
+                let display_icon: Option<String> = sub.get_value("DisplayIcon").ok();
+                let install_loc: Option<String> = sub.get_value("InstallLocation").ok();
+                if let Some(dn) = display_name {
+                    let path = display_icon
+                        .or(install_loc)
+                        .unwrap_or_default()
+                        .trim_matches('"')
+                        .to_string();
+                    if !path.is_empty() {
+                        apps.push((dn, path));
+                    }
+                }
+            }
+        }
+    }
+    apps
+}
+
+#[tauri::command]
+async fn list_installed_apps() -> Result<Vec<(String, String)>, String> {
+    #[cfg(not(target_os = "windows"))]
+    return Ok(vec![]);
+    #[cfg(target_os = "windows")]
+    {
+        let mut apps = Vec::new();
+        // 64-bit 软件
+        apps.extend(read_installed_from_reg(
+            r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+        ));
+        // 32-bit 软件
+        apps.extend(read_installed_from_reg(
+            r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        ));
+        // 用户安装
+        apps.extend(read_installed_from_reg(
+            r"HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+        ));
+        // 去重（按路径去重，保留第一个）
+        let mut seen = std::collections::HashSet::new();
+        apps.retain(|(_, p)| seen.insert(p.clone()));
+        // 按名称排序
+        apps.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+        Ok(apps)
+    }
+}
+
 #[tauri::command]
 async fn download_update(
     app: AppHandle,
@@ -659,6 +728,7 @@ pub fn run() {
             get_stats,
             json_import_cmd,
             get_import_tpl,
+            list_installed_apps,
             download_update,
             export_data,
             minimize_to_tray,
