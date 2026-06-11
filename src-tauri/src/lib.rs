@@ -44,9 +44,11 @@ fn execute_action(action: &TaskAction, title: &str) {
                     .args(["-ExecutionPolicy", "Bypass", "-File", path])
                     .spawn();
             } else if lower.ends_with(".py") {
-                // Python 脚本
-                let _ = std::process::Command::new("python")
-                    .arg(path).spawn();
+                // Python 脚本：优先用 py 启动器，不行再试 python
+                let r = std::process::Command::new("py").arg(path).spawn();
+                if r.is_err() {
+                    let _ = std::process::Command::new("python").arg(path).spawn();
+                }
             } else {
                 // .bat / .cmd / .vbs / .js 等
                 let _ = std::process::Command::new("cmd")

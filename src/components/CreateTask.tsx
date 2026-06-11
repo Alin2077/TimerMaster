@@ -357,7 +357,8 @@ export default function CreateTask({ onTaskCreated }: CreateTaskProps) {
                 style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid var(--accent-blue)", background: "transparent", color: "var(--accent-blue)", cursor: "pointer", fontSize: 12 }}>📁 选择</button>
             </div>
             <div style={{ fontSize: 10, color: "var(--text-muted)" }}>
-              支持 .bat .cmd .ps1 .py .vbs .js 等脚本文件
+              支持 .bat .cmd .ps1 .py .vbs .js 等
+              <span style={{ color: "var(--accent-green)" }}> .py 用 py 启动器运行</span>
             </div>
           </div>
         )}
